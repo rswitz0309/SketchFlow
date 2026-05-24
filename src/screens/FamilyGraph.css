@@ -47,6 +47,8 @@
   overflow: hidden;
   cursor: grab;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
   background-color: #eceae4;
   background-image: radial-gradient(circle, rgba(61, 56, 50, 0.14) 1px, transparent 1px);
   background-size: 22px 22px;
@@ -61,11 +63,21 @@
   top: 0;
   left: 0;
   will-change: transform;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .sf-family__graph {
   display: block;
   overflow: visible;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sf-family__graph text {
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
 }
 
 .sf-family__edge {

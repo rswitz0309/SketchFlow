@@ -29,6 +29,7 @@ export function usePanZoom(initial: PanZoomState = { scale: 1, x: 0, y: 0 }) {
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     dragRef.current = { px: e.clientX, py: e.clientY, x: transform.x, y: transform.y };
   }, [transform.x, transform.y]);
@@ -36,6 +37,7 @@ export function usePanZoom(initial: PanZoomState = { scale: 1, x: 0, y: 0 }) {
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     const d = dragRef.current;
     if (!d) return;
+    e.preventDefault();
     setTransform((t) => ({
       ...t,
       x: d.x + (e.clientX - d.px),
@@ -65,6 +67,8 @@ export function usePanZoom(initial: PanZoomState = { scale: 1, x: 0, y: 0 }) {
       onPointerMove,
       onPointerUp,
       onPointerLeave: onPointerUp,
+      onDragStart: (e: React.DragEvent) => e.preventDefault(),
+      onSelectStart: (e: React.SyntheticEvent) => e.preventDefault(),
     },
   };
 }
