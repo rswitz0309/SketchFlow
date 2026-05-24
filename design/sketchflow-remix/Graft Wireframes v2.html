@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GRAFT — Wireframes v2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      /* black + blue theme */
+      --bg: #f6f8fc;
+      --surface: #ffffff;
+      --surface-2: #eef2f8;
+      --ink: #0b1220;            /* near-black with blue undertone */
+      --ink-2: #1f2a44;
+      --ink-3: #5b6479;
+      --ink-4: #94a0b6;
+      --rule: #dde4ee;
+      --rule-strong: #c4cee0;
+      --hl: #dbeafe;             /* selected-state tint (blue, was yellow) */
+      --hl-strong: #bfdbfe;
+      --accent: #2563eb;
+      --accent-2: #1d4ed8;
+      --accent-3: #0b1220;       /* "black" pairing for buttons */
+
+      /* change-type chips: keep meaning, but cooler palette */
+      --add: #0d9488;
+      --add-bg: rgba(13, 148, 136, 0.12);
+      --rem: #e11d48;
+      --rem-bg: rgba(225, 29, 72, 0.10);
+      --mov: #2563eb;
+      --mov-bg: rgba(37, 99, 235, 0.12);
+      --sty: #7c3aed;
+      --sty-bg: rgba(124, 58, 237, 0.12);
+
+      --sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+      --mono: 'JetBrains Mono', ui-monospace, monospace;
+
+      --r-sm: 4px;
+      --r: 6px;
+      --r-lg: 10px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    button { font-family: inherit; }
+
+    /* Top bar — dark, blue-accented */
+    .topbar {
+      position: sticky; top: 0; z-index: 30;
+      display: flex; align-items: center; gap: 20px;
+      padding: 14px 28px;
+      background: var(--ink);
+      border-bottom: 1px solid var(--accent-2);
+      color: #e2e8f0;
+    }
+    .brand {
+      display: inline-flex; align-items: center; gap: 10px;
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 17px;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+    }
+    .brand-mark {
+      width: 26px; height: 26px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--accent);
+      color: #ffffff;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 0 0 1px rgba(37,99,235,0.4), 0 2px 8px rgba(37,99,235,0.35);
+    }
+    .brand .dot { color: var(--accent); }
+    .subtitle {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: #94a3b8;
+      letter-spacing: 0;
+    }
+    .tabs {
+      display: flex;
+      gap: 2px;
+      margin-left: auto;
+      background: rgba(255,255,255,0.06);
+      padding: 3px;
+      border-radius: var(--r);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .tab {
+      font-family: var(--sans);
+      font-size: 12.5px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: #94a3b8;
+      cursor: pointer;
+      letter-spacing: -0.01em;
+      transition: background .12s, color .12s;
+    }
+    .tab:hover { color: #e2e8f0; }
+    .tab.active {
+      background: var(--accent);
+      color: #ffffff;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    }
+
+    /* Area body */
+    .area {
+      padding: 28px 32px 64px;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+    .area-head {
+      display: flex; align-items: baseline; gap: 16px;
+      margin-bottom: 22px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--rule);
+    }
+    .area-title {
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 22px;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+    .area-blurb {
+      font-family: var(--sans);
+      font-size: 13px;
+      color: var(--ink-3);
+      max-width: 720px;
+    }
+    .area-blurb b { color: var(--ink); font-weight: 500; }
+
+    /* Frame around the wireframe */
+    .frame {
+      background: var(--surface);
+      border: 1px solid var(--rule);
+      border-radius: var(--r-lg);
+      overflow: hidden;
+    }
+    .frame-chrome {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--rule);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-3);
+    }
+    .frame-chrome .dots { display: inline-flex; gap: 5px; }
+    .frame-chrome .dots span { width: 10px; height: 10px; border-radius: 50%; background: var(--rule-strong); }
+    .frame-body { background: var(--surface); }
+
+    /* Generic UI atoms */
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      border: 1px solid var(--rule-strong);
+      border-radius: 999px;
+      font-family: var(--mono);
+      font-size: 11px;
+      background: var(--surface);
+      color: var(--ink-2);
+      cursor: pointer;
+      user-select: none;
+    }
+    .pill.active { border-color: var(--ink); color: var(--ink); }
+    .pill .sw { width: 8px; height: 8px; border-radius: 2px; background: var(--ink-4); }
+    .pill.add  .sw { background: var(--add); }
+    .pill.rem  .sw { background: var(--rem); }
+    .pill.mov  .sw { background: var(--mov); }
+    .pill.sty  .sw { background: var(--sty); }
+    .pill[data-on="false"] { opacity: 0.45; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      border: 1px solid var(--rule-strong);
+      border-radius: var(--r-sm);
+      background: var(--surface);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .12s, border-color .12s;
+    }
+    .btn:hover { background: var(--surface-2); border-color: var(--ink-4); }
+    .btn.primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+    .btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
+    .btn.ghost { border-color: transparent; }
+    .btn.ghost:hover { background: var(--surface-2); }
+    .btn.sm { padding: 4px 8px; font-size: 11px; }
+
+    .kbd {
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 1px 6px;
+      border: 1px solid var(--rule-strong);
+      border-bottom-width: 2px;
+      border-radius: 3px;
+      background: var(--surface);
+      color: var(--ink-3);
+    }
+
+    .mono { font-family: var(--mono); }
+    .muted { color: var(--ink-3); }
+
+    /* Footer */
+    .footer {
+      padding: 24px 32px 48px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--ink-4);
+      text-align: center;
+    }
+  </style>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span class="brand-mark">G</span> graft</div>
+    <div class="subtitle">a sketch app for artists — with git built in</div>
+    <div id="tabs-mount" style="margin-left:auto"></div>
+  </div>
+
+  <div id="root"></div>
+
+  <div class="footer">graft · wireframes v2 — sketch with version control</div>
+
+  <script type="text/babel" src="primitives.jsx"></script>
+  <script type="text/babel" src="shell-v2.jsx"></script>
+  <script type="text/babel" src="history-v2.jsx"></script>
+  <script type="text/babel" src="pr-v2.jsx"></script>
+  <script type="text/babel" src="app-v2.jsx"></script>
+</body>
+</html>

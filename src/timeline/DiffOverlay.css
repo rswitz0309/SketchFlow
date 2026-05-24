@@ -1,0 +1,21 @@
+.sf-diff-overlay {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+}
+
+.sf-diff-overlay__hit {
+  cursor: pointer;
+  transition: opacity 0.12s ease, stroke-width 0.12s ease;
+}
+
+.sf-diff-overlay__hit.is-dimmed {
+  pointer-events: all;
+}
+
+.sf-diff-overlay__hit.is-active {
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.15));
+}

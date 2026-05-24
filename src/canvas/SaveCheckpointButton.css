@@ -1,0 +1,61 @@
+.sf-save {
+  position: relative;
+}
+
+.sf-save__cta {
+  height: 40px;
+  padding: 0 var(--s-4);
+  font-weight: 600;
+  font-size: var(--size-14);
+  transition: background var(--dur-fast) var(--ease-out),
+              transform var(--dur-med) var(--ease-spring);
+}
+.sf-save__cta.is-saved {
+  background: var(--success);
+  border-color: var(--success);
+  animation: sf-save-pop var(--dur-med) var(--ease-spring);
+}
+
+@keyframes sf-save-pop {
+  0% { transform: scale(0.94); }
+  60% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+.sf-save__popover {
+  position: absolute;
+  top: calc(100% + var(--s-2));
+  right: 0;
+  width: 320px;
+  padding: var(--s-4);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  z-index: 20;
+  animation: sf-save-in var(--dur-med) var(--ease-out);
+}
+
+@keyframes sf-save-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.sf-save__label {
+  font-size: var(--size-12);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.sf-save__input { width: 100%; }
+
+.sf-save__row {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}

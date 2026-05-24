@@ -1,0 +1,98 @@
+:root {
+  /* Palette — cool blue, designer-tool */
+  --bg: #f6f8fc;
+  --surface: #ffffff;
+  --surface-2: #eef2f8;
+  --surface-soft: #f3f6fb;
+
+  --ink: #0b1220;
+  --ink-2: #1f2a44;
+  --ink-3: #5b6479;
+  --ink-4: #94a0b6;
+
+  --rule: #dde4ee;
+  --rule-strong: #c4cee0;
+
+  --hl: #dbeafe;
+  --hl-strong: #bfdbfe;
+
+  --accent: #2563eb;
+  --accent-2: #1d4ed8;
+  --accent-ink: #ffffff;
+  --accent-soft: #dbeafe;
+
+  --success: #0d9488;
+  --success-soft: rgba(13, 148, 136, 0.12);
+  --danger: #e11d48;
+  --danger-soft: rgba(225, 29, 72, 0.10);
+
+  /* Change-type chips (Sketchflow v2 wireframes) */
+  --add: #0d9488;
+  --add-bg: rgba(13, 148, 136, 0.12);
+  --rem: #e11d48;
+  --rem-bg: rgba(225, 29, 72, 0.10);
+  --mov: #2563eb;
+  --mov-bg: rgba(37, 99, 235, 0.12);
+  --sty: #7c3aed;
+  --sty-bg: rgba(124, 58, 237, 0.12);
+
+  /* Back-compat aliases (kept so existing rules work) */
+  --hairline: var(--rule);
+  --hairline-strong: var(--rule-strong);
+  --muted: var(--ink-3);
+  --ink-soft: var(--ink-2);
+
+  /* Typography */
+  --font-sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-serif: 'DM Sans', system-ui, sans-serif;
+
+  --size-10: 10px;
+  --size-11: 11px;
+  --size-12: 12px;
+  --size-13: 13px;
+  --size-14: 14px;
+  --size-15: 15px;
+  --size-16: 16px;
+  --size-18: 18px;
+  --size-20: 20px;
+  --size-22: 22px;
+  --size-24: 24px;
+  --size-32: 32px;
+  --size-40: 40px;
+  --size-56: 56px;
+
+  /* Spacing */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+  --s-9: 96px;
+
+  /* Radius — tight, tool-like */
+  --r-1: 4px;
+  --r-2: 6px;
+  --r-3: 10px;
+  --r-full: 999px;
+
+  /* Shadow */
+  --shadow-sm: 0 1px 2px rgba(11, 18, 32, 0.06);
+  --shadow-md: 0 1px 3px rgba(11, 18, 32, 0.08), 0 4px 14px rgba(11, 18, 32, 0.06);
+  --shadow-lg: 0 8px 32px rgba(11, 18, 32, 0.14), 0 2px 8px rgba(11, 18, 32, 0.06);
+
+  /* Topbar (dark) */
+  --topbar-bg: var(--ink);
+  --topbar-ink: #e2e8f0;
+  --topbar-muted: #94a3b8;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-med: 220ms;
+  --dur-slow: 360ms;
+}

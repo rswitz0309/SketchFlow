@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GRAFT — Wireframes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=Kalam:wght@300;400;700&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --paper: #f4ede0;
+      --paper-2: #ece3d2;
+      --ink: #1c1a17;
+      --ink-2: #3b3631;
+      --ink-3: #6a6258;
+      --rule: #c9bfae;
+      --hl: oklch(0.92 0.13 95 / 0.55);          /* highlighter yellow */
+      --add: oklch(0.62 0.12 145);                /* green */
+      --add-fill: oklch(0.62 0.12 145 / 0.18);
+      --rem: oklch(0.56 0.16 25);                 /* red */
+      --rem-fill: oklch(0.56 0.16 25 / 0.18);
+      --mov: oklch(0.55 0.13 255);                /* blue */
+      --mov-fill: oklch(0.55 0.13 255 / 0.16);
+      --sty: oklch(0.72 0.13 75);                 /* amber */
+      --sty-fill: oklch(0.72 0.13 75 / 0.20);
+      --hand: 'Caveat', 'Kalam', cursive;
+      --mono: 'IBM Plex Mono', ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.45;
+      /* faint paper grain */
+      background-image:
+        radial-gradient(rgba(60,40,10,0.035) 1px, transparent 1px),
+        radial-gradient(rgba(60,40,10,0.025) 1px, transparent 1px);
+      background-size: 22px 22px, 13px 13px;
+      background-position: 0 0, 6px 7px;
+    }
+    /* Top chrome */
+    .topbar {
+      position: sticky; top: 0; z-index: 20;
+      display: flex; align-items: baseline; gap: 24px;
+      padding: 18px 28px 10px;
+      background: linear-gradient(to bottom, var(--paper) 75%, rgba(244,237,224,0));
+      border-bottom: 1px dashed var(--rule);
+    }
+    .brand {
+      font-family: var(--hand);
+      font-weight: 700;
+      font-size: 34px;
+      line-height: 1;
+      letter-spacing: 0.5px;
+      color: var(--ink);
+    }
+    .brand .dot { color: var(--rem); }
+    .subtitle {
+      font-family: var(--hand);
+      font-size: 19px;
+      color: var(--ink-2);
+      transform: rotate(-1deg);
+    }
+    .tabs {
+      display: flex; gap: 6px;
+      padding: 14px 28px 0;
+      flex-wrap: wrap;
+    }
+    .tab {
+      font-family: var(--hand);
+      font-size: 21px;
+      padding: 6px 14px 4px;
+      border: 1.5px solid var(--ink);
+      border-bottom: none;
+      border-radius: 14px 14px 2px 2px;
+      background: var(--paper-2);
+      color: var(--ink-2);
+      cursor: pointer;
+      transform: translateY(2px);
+      transition: transform .15s, background .15s, color .15s;
+      position: relative;
+    }
+    .tab:hover { background: #f1e7d2; color: var(--ink); }
+    .tab.active {
+      background: var(--paper);
+      color: var(--ink);
+      transform: translateY(0);
+      box-shadow: 0 -2px 0 var(--paper);
+    }
+    .tab .num {
+      font-family: var(--mono);
+      font-size: 10px;
+      vertical-align: super;
+      margin-right: 4px;
+      color: var(--ink-3);
+    }
+    .tab.hero::after {
+      content: 'hero ↓';
+      position: absolute;
+      top: -18px; left: 50%;
+      transform: translateX(-50%) rotate(-4deg);
+      font-family: var(--hand);
+      font-size: 14px;
+      color: var(--rem);
+      white-space: nowrap;
+    }
+    .area-rule {
+      height: 0;
+      border-top: 2px solid var(--ink);
+      margin: 0 28px;
+    }
+
+    /* Area panel */
+    .area {
+      padding: 22px 28px 64px;
+    }
+    .area-head {
+      display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap;
+      margin: 4px 0 18px;
+    }
+    .area-title {
+      font-family: var(--hand);
+      font-weight: 700;
+      font-size: 40px;
+      line-height: 1;
+      letter-spacing: 0.3px;
+    }
+    .area-blurb {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--ink-3);
+      max-width: 720px;
+    }
+
+    /* Variation grid: 3 across, horizontally scrollable if narrow */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(580px, 1fr));
+      gap: 24px;
+    }
+    @media (max-width: 1400px) {
+      .grid {
+        grid-auto-flow: column;
+        grid-auto-columns: 580px;
+        grid-template-columns: none;
+        overflow-x: auto;
+        padding-bottom: 14px;
+      }
+    }
+    .card {
+      background: var(--paper);
+      border: 1.75px solid var(--ink);
+      border-radius: 6px;
+      padding: 14px 14px 12px;
+      box-shadow: 3px 4px 0 var(--ink);
+      position: relative;
+    }
+    .card .badge {
+      position: absolute; top: -12px; left: 12px;
+      font-family: var(--hand);
+      font-size: 18px;
+      background: var(--paper);
+      padding: 0 8px;
+      transform: rotate(-1.5deg);
+    }
+    .card .badge .n {
+      color: var(--rem);
+      font-weight: 700;
+    }
+    .card h3 {
+      margin: 6px 4px 8px;
+      font-family: var(--hand);
+      font-weight: 600;
+      font-size: 26px;
+      letter-spacing: 0.3px;
+      line-height: 1.05;
+    }
+    .card .caption {
+      margin: 10px 4px 2px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--ink-3);
+      line-height: 1.45;
+    }
+    .card .caption b {
+      color: var(--ink);
+      font-weight: 500;
+    }
+    .canvas {
+      width: 100%;
+      height: 360px;
+      display: block;
+      background: #fbf6ea;
+      border: 1.25px dashed var(--rule);
+      border-radius: 3px;
+    }
+    .canvas.tall { height: 420px; }
+    .canvas text { font-family: var(--mono); fill: var(--ink-2); }
+    .canvas .hand { font-family: var(--hand); fill: var(--ink); }
+
+    /* Legend chip used across diff */
+    .legend-row {
+      display: flex; gap: 10px; flex-wrap: wrap;
+      margin: 8px 4px 4px;
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 3px 8px 2px;
+      border: 1.25px solid var(--ink);
+      border-radius: 999px;
+      background: var(--paper);
+      cursor: pointer;
+      user-select: none;
+    }
+    .chip[data-on="false"] { opacity: 0.4; }
+    .chip .sw {
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      border: 1px solid var(--ink);
+    }
+    .chip.add .sw { background: var(--add-fill); border-color: var(--add); }
+    .chip.rem .sw { background: var(--rem-fill); border-color: var(--rem); }
+    .chip.mov .sw {
+      background: var(--mov-fill); border-color: var(--mov);
+      border-style: dashed;
+    }
+    .chip.sty .sw { background: var(--sty-fill); border-color: var(--sty); }
+
+    /* Change list (used in diff variation 1) */
+    .changelist {
+      list-style: none;
+      margin: 0; padding: 0;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+    .changelist li {
+      display: flex; align-items: center; gap: 8px;
+      padding: 4px 6px;
+      border-bottom: 1px dashed var(--rule);
+      cursor: pointer;
+    }
+    .changelist li:last-child { border-bottom: none; }
+    .changelist li .dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      flex: 0 0 auto;
+    }
+    .changelist li.add  .dot { background: var(--add); }
+    .changelist li.rem  .dot { background: var(--rem); }
+    .changelist li.mov  .dot { background: var(--mov); }
+    .changelist li.sty  .dot { background: var(--sty); }
+    .changelist li.selected { background: var(--hl); }
+
+    /* Sticky-note callout */
+    .note {
+      position: absolute;
+      font-family: var(--hand);
+      font-size: 15px;
+      color: var(--ink);
+      background: #fff4b8;
+      padding: 4px 8px 3px;
+      border: 1.25px solid var(--ink);
+      border-radius: 3px;
+      box-shadow: 1.5px 2px 0 rgba(0,0,0,0.18);
+      transform: rotate(-2deg);
+      pointer-events: none;
+      max-width: 200px;
+      line-height: 1.15;
+    }
+
+    /* Footer note */
+    .footer {
+      padding: 30px 28px 60px;
+      font-family: var(--hand);
+      font-size: 22px;
+      color: var(--ink-2);
+      transform: rotate(-0.5deg);
+    }
+    .footer .tag { color: var(--rem); }
+
+    /* Sketch wobble filter container */
+    .filters { position: absolute; width: 0; height: 0; overflow: hidden; }
+  </style>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <!-- Global SVG filter for hand-drawn wobble. Apply via filter="url(#sketch)" -->
+  <svg class="filters" aria-hidden="true">
+    <defs>
+      <filter id="sketch" x="-2%" y="-2%" width="104%" height="104%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="2" seed="3" result="t" />
+        <feDisplacementMap in="SourceGraphic" in2="t" scale="1.5" />
+      </filter>
+      <filter id="sketch-strong" x="-3%" y="-3%" width="106%" height="106%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="7" result="t" />
+        <feDisplacementMap in="SourceGraphic" in2="t" scale="2.2" />
+      </filter>
+    </defs>
+  </svg>
+
+  <div class="topbar">
+    <div class="brand">GRAFT<span class="dot">.</span></div>
+    <div class="subtitle">wireframes — structure &amp; flow, no styling yet</div>
+  </div>
+
+  <div id="root"></div>
+
+  <div class="footer">
+    end of the napkin <span class="tag">~ pick your favorites, mix &amp; match ~</span>
+  </div>
+
+  <script type="text/babel" src="sketch.jsx"></script>
+  <script type="text/babel" src="shell.jsx"></script>
+  <script type="text/babel" src="diff.jsx"></script>
+  <script type="text/babel" src="history.jsx"></script>
+  <script type="text/babel" src="merge.jsx"></script>
+  <script type="text/babel" src="memory.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>

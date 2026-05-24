@@ -1,0 +1,99 @@
+.sf-app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.sf-app__main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sf-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+  padding: var(--s-3) var(--s-6);
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--accent-2);
+  color: var(--topbar-ink);
+}
+
+.sf-topbar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  color: #ffffff;
+  font-size: var(--size-15);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: transparent;
+  padding: 0;
+}
+
+.sf-topbar__mark {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #ffffff;
+  border-radius: var(--r-2);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4),
+              0 2px 8px rgba(37, 99, 235, 0.35);
+}
+
+.sf-topbar__name { letter-spacing: -0.02em; }
+
+.sf-topbar__subtitle {
+  font-family: var(--font-mono);
+  font-size: var(--size-11);
+  color: var(--topbar-muted);
+}
+
+.sf-topbar__tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px;
+  border-radius: var(--r-2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sf-topbar__tab {
+  font-family: var(--font-sans);
+  font-size: var(--size-12);
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: var(--topbar-muted);
+  letter-spacing: -0.01em;
+  transition: background var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
+}
+.sf-topbar__tab:hover:not(:disabled) {
+  color: var(--topbar-ink);
+}
+.sf-topbar__tab.is-active {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+.sf-topbar__tab:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .sf-topbar__subtitle { display: none; }
+  .sf-topbar { padding: var(--s-3) var(--s-4); gap: var(--s-3); }
+}

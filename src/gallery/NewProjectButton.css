@@ -1,0 +1,78 @@
+.sf-new-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  padding: var(--s-6) var(--s-4);
+  min-height: 220px;
+  border-radius: var(--r-3);
+  border: 1.5px dashed var(--rule-strong);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out),
+              background var(--dur-fast) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out);
+}
+.sf-new-card:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--surface);
+  transform: translateY(-2px);
+}
+
+.sf-new-card__plus {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.sf-new-card:hover .sf-new-card__plus {
+  background: var(--accent-soft);
+}
+
+.sf-new-card__label {
+  font-family: var(--font-sans);
+  font-size: var(--size-15);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.sf-new-card__hint {
+  font-family: var(--font-mono);
+  font-size: var(--size-11);
+  color: var(--ink-3);
+}
+
+.sf-new-card--form {
+  align-items: stretch;
+  justify-content: center;
+  gap: var(--s-3);
+  padding: var(--s-5);
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--surface);
+  cursor: default;
+  color: var(--ink);
+}
+
+.sf-new-card__field-label {
+  font-family: var(--font-mono);
+  font-size: var(--size-10);
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+}
+.sf-new-card__input { width: 100%; }
+.sf-new-card__row {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
