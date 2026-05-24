@@ -59,6 +59,9 @@ export default function App() {
             onOpenCanvas={() =>
               setRoute({ screen: 'canvas', projectId: route.projectId })
             }
+            onOpenBranch={(branchProjectId) =>
+              setRoute({ screen: 'canvas', projectId: branchProjectId })
+            }
             onRestore={() =>
               setRoute({ screen: 'canvas', projectId: route.projectId })
             }

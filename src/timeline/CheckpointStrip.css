@@ -3,9 +3,17 @@
   gap: var(--s-3);
   overflow-x: auto;
   overflow-y: hidden;
+  align-items: flex-start;
   padding: var(--s-3) var(--s-5) var(--s-4);
   scroll-snap-type: x proximity;
   scrollbar-width: thin;
+}
+
+.sf-strip__column {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  scroll-snap-align: start;
 }
 
 .sf-strip--empty {
@@ -17,7 +25,7 @@
 }
 
 .sf-strip__item {
-  flex: 0 0 200px;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--s-2);

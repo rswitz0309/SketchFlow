@@ -175,13 +175,18 @@ export default function Canvas({ projectId, onBack, onOpenTimeline }: CanvasProp
               maxLength={80}
             />
           ) : (
-            <button
-              className="sf-canvas__title"
-              onClick={() => setEditingTitle(true)}
-              title="Rename"
-            >
-              {project.title}
-            </button>
+            <>
+              <button
+                className="sf-canvas__title"
+                onClick={() => setEditingTitle(true)}
+                title="Rename"
+              >
+                {project.title}
+              </button>
+              {project.parentProjectId && (
+                <span className="sf-canvas__variant-badge">Variant</span>
+              )}
+            </>
           )}
         </div>
         <div className="sf-canvas__actions">

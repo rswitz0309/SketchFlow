@@ -63,6 +63,18 @@
   font-size: var(--size-13);
 }
 
+.sf-canvas__variant-badge {
+  font-size: var(--size-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-radius: var(--r-full);
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+
 .sf-canvas__title {
   font-family: var(--font-sans);
   font-size: var(--size-15);

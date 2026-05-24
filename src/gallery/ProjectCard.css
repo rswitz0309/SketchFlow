@@ -50,12 +50,25 @@
   gap: var(--s-1);
 }
 
+.sf-pcard__badge {
+  font-size: var(--size-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-radius: var(--r-full);
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+
 .sf-pcard__title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--s-2);
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .sf-pcard__title {

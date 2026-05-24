@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Checkpoint, Project } from '../types';
+import type { Checkpoint, Project, ProjectBranch } from '../types';
 import { normalizeCompareIds, orderedCompareCheckpoints } from '../lib/compareOrder';
-import { getProject, listCheckpoints } from '../lib/storage';
+import {
+  createBranchFromCheckpoint,
+  getProject,
+  isBranchingAvailable,
+  listCheckpoints,
+  listChildBranches,
+} from '../lib/storage';
 import { parseStrokesFromSvg } from '../lib/serializeSvg';
 import { clearAutosave, saveAutosave } from '../canvas/useAutosave';
 import CheckpointStrip from '../timeline/CheckpointStrip';
@@ -15,6 +21,7 @@ export interface TimelineProps {
   projectId: string;
   onBack: () => void;
   onOpenCanvas: () => void;
+  onOpenBranch: (branchProjectId: string) => void;
   onRestore: (svgData: string) => void;
 }
 
@@ -24,11 +31,15 @@ export default function Timeline({
   projectId,
   onBack,
   onOpenCanvas,
+  onOpenBranch,
   onRestore,
 }: TimelineProps) {
   const [project, setProject] = useState<Project | null>(null);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+  const [childBranches, setChildBranches] = useState<ProjectBranch[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [branching, setBranching] = useState(false);
+  const [branchingAvailable, setBranchingAvailable] = useState(true);
   const [mode, setMode] = useState<Mode>('view');
   const [index, setIndex] = useState(0);
   const [compareIds, setCompareIds] = useState<[string | null, string | null]>([
@@ -42,24 +53,33 @@ export default function Timeline({
     setIndex(0);
   }, [projectId]);
 
+  async function loadTimeline() {
+    const [p, cps, branches, branchesOk] = await Promise.all([
+      getProject(projectId),
+      listCheckpoints(projectId),
+      listChildBranches(projectId),
+      isBranchingAvailable(),
+    ]);
+    setBranchingAvailable(branchesOk);
+    if (!p) {
+      onBack();
+      return null;
+    }
+    setProject(p);
+    setCheckpoints(cps);
+    setChildBranches(branches);
+    setIndex(Math.max(0, cps.length - 1));
+    setCompareIds([null, null]);
+    return { p, cps, branches };
+  }
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         setError(null);
-        const [p, cps] = await Promise.all([
-          getProject(projectId),
-          listCheckpoints(projectId),
-        ]);
-        if (cancelled) return;
-        if (!p) {
-          onBack();
-          return;
-        }
-        setProject(p);
-        setCheckpoints(cps);
-        setIndex(Math.max(0, cps.length - 1));
-        setCompareIds([null, null]);
+        const result = await loadTimeline();
+        if (cancelled || !result) return;
       } catch (e: unknown) {
         if (cancelled) return;
         console.error(e);
@@ -75,6 +95,21 @@ export default function Timeline({
   }, [projectId]);
 
   const selected = checkpoints[index] ?? null;
+  const isLatest = checkpoints.length > 0 && index === checkpoints.length - 1;
+
+  const branchesByCheckpoint = useMemo(() => {
+    const map = new Map<string, ProjectBranch[]>();
+    for (const b of childBranches) {
+      const list = map.get(b.forkedFromCheckpointId) ?? [];
+      list.push(b);
+      map.set(b.forkedFromCheckpointId, list);
+    }
+    return map;
+  }, [childBranches]);
+
+  const branchesForSelected = selected
+    ? (branchesByCheckpoint.get(selected.id) ?? [])
+    : [];
 
   const [compareBefore, compareAfter] = useMemo(
     () => orderedCompareCheckpoints(checkpoints, compareIds),
@@ -94,18 +129,49 @@ export default function Timeline({
     });
   }
 
-  function handleRestore() {
-    if (!selected) return;
+  function seedAutosave(targetProjectId: string, svgData: string) {
     try {
-      const next = parseStrokesFromSvg(selected.svgData);
+      const next = parseStrokesFromSvg(svgData);
       if (next && next.length > 0) {
-        saveAutosave(projectId, next);
+        saveAutosave(targetProjectId, next);
       } else {
-        clearAutosave(projectId);
+        clearAutosave(targetProjectId);
       }
     } catch {
-      clearAutosave(projectId);
+      clearAutosave(targetProjectId);
     }
+  }
+
+  async function handleRestore() {
+    if (!selected) return;
+
+    if (!isLatest && !branchingAvailable) {
+      seedAutosave(projectId, selected.svgData);
+      onRestore(selected.svgData);
+      return;
+    }
+
+    if (!isLatest) {
+      setBranching(true);
+      try {
+        const branch = await createBranchFromCheckpoint(projectId, selected.id);
+        seedAutosave(branch.id, selected.svgData);
+        await loadTimeline();
+        onOpenBranch(branch.id);
+      } catch (e: unknown) {
+        console.error(e);
+        setError(
+          e instanceof Error
+            ? e.message
+            : 'Could not create a variant from this checkpoint.',
+        );
+      } finally {
+        setBranching(false);
+      }
+      return;
+    }
+
+    seedAutosave(projectId, selected.svgData);
     onRestore(selected.svgData);
   }
 
@@ -133,6 +199,9 @@ export default function Timeline({
           <h1 className="sf-timeline__title">
             {project?.title ?? 'Your timeline'}
           </h1>
+          {project?.parentProjectId && (
+            <span className="sf-timeline__variant-badge">Variant</span>
+          )}
           <span className="sf-timeline__eyebrow">Your timeline</span>
         </div>
         <div className="sf-timeline__actions">
@@ -179,7 +248,17 @@ export default function Timeline({
       <div className="sf-timeline__main">
         {mode === 'view' ? (
           selected ? (
-            <CheckpointViewer checkpoint={selected} onRestore={handleRestore} />
+            <CheckpointViewer
+              checkpoint={selected}
+              checkpointIndex={index}
+              checkpointCount={checkpoints.length}
+              isLatest={isLatest}
+              branchingAvailable={branchingAvailable}
+              existingBranches={branchesForSelected}
+              branching={branching}
+              onRestore={handleRestore}
+              onOpenBranch={onOpenBranch}
+            />
           ) : (
             <div className="sf-timeline__empty">
               <div className="sf-timeline__empty-art" aria-hidden>
@@ -244,8 +323,9 @@ export default function Timeline({
         mode={mode}
         compareIds={compareIds}
         onToggleCompare={handleToggleCompare}
+        branchesByCheckpoint={branchesByCheckpoint}
+        onOpenBranch={onOpenBranch}
       />
     </div>
   );
 }
-

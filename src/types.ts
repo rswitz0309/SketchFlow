@@ -12,6 +12,26 @@ export interface Project {
   title: string;
   createdAt: string;
   updatedAt: string;
+  parentProjectId?: string | null;
+  rootProjectId?: string | null;
+  forkedFromCheckpointId?: string | null;
+}
+
+/** A variant sketch branched from a checkpoint on another project. */
+export interface ProjectBranch {
+  id: string;
+  title: string;
+  parentProjectId: string;
+  rootProjectId: string;
+  forkedFromCheckpointId: string;
+  updatedAt: string;
+  latestThumbnailDataUrl: string | null;
+  checkpointCount: number;
+}
+
+export interface GalleryFolder {
+  root: ProjectSummary;
+  variants: ProjectSummary[];
 }
 
 export interface Checkpoint {
@@ -26,6 +46,8 @@ export interface Checkpoint {
 export interface ProjectSummary extends Project {
   checkpointCount: number;
   latestThumbnailDataUrl: string | null;
+  isVariant?: boolean;
+  rootProjectId?: string | null;
 }
 
 export const CANVAS_W = 1600;

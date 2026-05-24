@@ -5,6 +5,7 @@ import './ProjectCard.css';
 
 export interface ProjectCardProps {
   project: ProjectSummary;
+  badge?: string;
   onOpen: () => void;
   onOpenTimeline: () => void;
   onDelete: () => void;
@@ -12,6 +13,7 @@ export interface ProjectCardProps {
 
 export default function ProjectCard({
   project,
+  badge,
   onOpen,
   onOpenTimeline,
   onDelete,
@@ -62,6 +64,7 @@ export default function ProjectCard({
       </div>
       <div className="sf-pcard__body">
         <div className="sf-pcard__title-row">
+          {badge && <span className="sf-pcard__badge">{badge}</span>}
           <h3 className="sf-pcard__title">{project.title}</h3>
           <div
             className="sf-pcard__menu"
