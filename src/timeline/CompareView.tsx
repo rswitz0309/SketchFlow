@@ -4,16 +4,14 @@ import { CANVAS_H, CANVAS_W } from '../types';
 import { relativeTime } from '../lib/time';
 import {
   buildPanelSvg,
-  diffSvg,
+  diffSvgAsync,
   type ChangeKind,
   type DiffChange,
+  type DiffResult,
 } from '../lib/diffStrokes';
-import {
-  analyzeDiffComponents,
-  generateDiffSummary,
-  hasAiKey,
-  type ComponentAnalysis,
-} from '../lib/ai';
+import { analyzeDiffComponents, type ComponentAnalysis } from '../lib/ai';
+import { buildComparePathContext } from '../lib/comparePathContext';
+import { buildIdentityHints } from '../lib/objectTracking';
 import { parseStrokesFromSvg } from '../lib/serializeSvg';
 import DiffOverlay from './DiffOverlay';
 import './CompareView.css';
@@ -21,6 +19,7 @@ import './CompareView.css';
 export interface CompareViewProps {
   left: Checkpoint;
   right: Checkpoint;
+  checkpoints: Checkpoint[];
 }
 
 type Legend = Record<ChangeKind, boolean>;
@@ -49,7 +48,7 @@ function PanelSvg({ inner }: { inner: string }) {
   );
 }
 
-export default function CompareView({ left, right }: CompareViewProps) {
+export default function CompareView({ left, right, checkpoints }: CompareViewProps) {
   const [legend, setLegend] = useState<Legend>({
     add: true,
     rem: true,
@@ -59,16 +58,33 @@ export default function CompareView({ left, right }: CompareViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
-  const [summary, setSummary] = useState<string | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [result, setResult] = useState<DiffResult | null>(null);
+  const [diffLoading, setDiffLoading] = useState(true);
   const [analyses, setAnalyses] = useState<ComponentAnalysis[]>([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const result = useMemo(
-    () => diffSvg(left.svgData, right.svgData),
-    [left.svgData, right.svgData],
-  );
+  useEffect(() => {
+    let cancelled = false;
+    setDiffLoading(true);
+    setResult(null);
+    void diffSvgAsync(left.svgData, right.svgData).then((r) => {
+      if (!cancelled) {
+        setResult(r);
+        setDiffLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [left.svgData, right.svgData]);
+
+  const diffResult = result ?? {
+    changes: [],
+    unchangedCount: 0,
+    beforeStrokes: [],
+    afterStrokes: [],
+  };
 
   const analysisById = useMemo(
     () => new Map(analyses.map((a) => [a.id, a])),
@@ -77,11 +93,11 @@ export default function CompareView({ left, right }: CompareViewProps) {
 
   const enrichedChanges = useMemo(
     () =>
-      result.changes.map((c) => {
+      diffResult.changes.map((c) => {
         const a = analysisById.get(c.id);
         return a ? { ...c, aiDescription: a.description, componentLabel: a.label } : c;
       }),
-    [result.changes, analysisById],
+    [diffResult.changes, analysisById],
   );
 
   const visibleChanges = useMemo(() => {
@@ -106,47 +122,46 @@ export default function CompareView({ left, right }: CompareViewProps) {
 
   const beforeInner = useMemo(() => {
     const strokes =
-      result.beforeStrokes.length > 0
-        ? result.beforeStrokes
+      diffResult.beforeStrokes.length > 0
+        ? diffResult.beforeStrokes
         : (parseStrokesFromSvg(left.svgData) ?? []);
     return buildPanelSvg(strokes);
-  }, [result.beforeStrokes, left.svgData]);
+  }, [diffResult.beforeStrokes, left.svgData]);
 
   const afterInner = useMemo(() => {
     const strokes =
-      result.afterStrokes.length > 0
-        ? result.afterStrokes
+      diffResult.afterStrokes.length > 0
+        ? diffResult.afterStrokes
         : (parseStrokesFromSvg(right.svgData) ?? []);
     return buildPanelSvg(strokes);
-  }, [result.afterStrokes, right.svgData]);
+  }, [diffResult.afterStrokes, right.svgData]);
 
   useEffect(() => {
     setSelectedId(null);
     setHoveredId(null);
     setFilter('');
-    setSummary(null);
     setAnalyses([]);
     setAnalysisLoading(true);
-    setSummaryLoading(true);
 
     let cancelled = false;
-    const changes = result.changes;
+    if (diffLoading || !result) return;
 
-    void (async () => {
-      const comps = await analyzeDiffComponents(changes, left, right);
+    const changes = result.changes;
+    const pathContext = buildComparePathContext(checkpoints, left, right);
+    const identityHints = buildIdentityHints(checkpoints, left, right, changes);
+    void analyzeDiffComponents(changes, left, right, {
+      pathContext,
+      identityHints,
+    }).then((comps) => {
       if (cancelled) return;
       setAnalyses(comps);
       setAnalysisLoading(false);
-      const text = await generateDiffSummary(changes, left, right, comps);
-      if (cancelled) return;
-      setSummary(text);
-      setSummaryLoading(false);
-    })();
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [left.id, right.id, result.changes, left, right]);
+  }, [left.id, right.id, result, diffLoading, left, right, checkpoints]);
 
   useEffect(() => {
     if (!hoveredId || !listRef.current) return;
@@ -162,7 +177,6 @@ export default function CompareView({ left, right }: CompareViewProps) {
     setSelectedId((prev) => (prev === c.id ? null : c.id));
   }
 
-  const aiMode = hasAiKey();
   const selected = enrichedChanges.find((c) => c.id === selectedId);
   const focusId = hoveredId ?? selectedId;
 
@@ -194,26 +208,16 @@ export default function CompareView({ left, right }: CompareViewProps) {
               className={`sf-diff__pill sf-diff__pill--${it.k} ${legend[it.k] ? 'is-on' : ''}`}
               onClick={() => toggleLegend(it.k)}
             >
-              <span className="sf-diff__pill-swatch" />
               {it.label}
             </button>
           ))}
 
           <span className="sf-diff__count mono">
-            {visibleChanges.length} of {result.changes.length} components
+            {diffLoading
+              ? 'Running vision diff…'
+              : `${visibleChanges.length} of ${diffResult.changes.length} components`}
           </span>
         </div>
-
-        {summaryLoading ? (
-          <div className="sf-diff__summary sf-diff__summary--loading mono">
-            Analyzing components…
-          </div>
-        ) : summary ? (
-          <div className="sf-diff__summary">
-            {summary}
-            {!aiMode && <span className="sf-diff__summary-badge mono">demo</span>}
-          </div>
-        ) : null}
 
         <div className="sf-diff__body">
           <div className="sf-diff__stage">
@@ -226,7 +230,7 @@ export default function CompareView({ left, right }: CompareViewProps) {
               </div>
               <div className="sf-diff__hero-canvas">
                 <DiffOverlay
-                  result={result}
+                  result={diffResult}
                   visibleChanges={visibleChanges}
                   selectedId={selectedId}
                   hoveredId={hoveredId}
@@ -278,7 +282,9 @@ export default function CompareView({ left, right }: CompareViewProps) {
             </div>
 
             <div className="sf-diff__rail-list" ref={listRef}>
-              {result.changes.length === 0 ? (
+              {diffLoading ? (
+                <p className="sf-diff__empty">Analyzing drawing with vision…</p>
+              ) : diffResult.changes.length === 0 ? (
                 <p className="sf-diff__empty">No changes between these checkpoints.</p>
               ) : visibleChanges.length === 0 ? (
                 <p className="sf-diff__empty">

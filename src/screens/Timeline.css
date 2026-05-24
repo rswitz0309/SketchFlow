@@ -1,8 +1,8 @@
 .sf-timeline {
   display: flex;
   flex-direction: column;
-  height: 100vh;
   width: 100%;
+  min-height: 100%;
   background: var(--surface-soft);
 }
 
@@ -89,13 +89,17 @@
 }
 
 .sf-timeline__main {
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: center;
   padding: var(--s-5);
-  overflow: auto;
+  overflow: visible;
+}
+
+.sf-timeline__main > .sf-viewer {
+  width: 100%;
+  max-width: min(100%, 1280px);
 }
 
 .sf-timeline__empty {
@@ -127,4 +131,5 @@
   align-items: center;
   gap: var(--s-3);
   padding: var(--s-3) var(--s-5);
+  flex-shrink: 0;
 }

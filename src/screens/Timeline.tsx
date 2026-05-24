@@ -211,7 +211,11 @@ export default function Timeline({
             </div>
           )
         ) : compareBefore && compareAfter ? (
-          <CompareView left={compareBefore} right={compareAfter} />
+          <CompareView
+            left={compareBefore}
+            right={compareAfter}
+            checkpoints={checkpoints}
+          />
         ) : (
           <div className="sf-timeline__compare-hint">
             Pick two checkpoints below to compare.

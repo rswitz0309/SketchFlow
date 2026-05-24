@@ -529,3 +529,12 @@ export function diffSvgComponents(beforeSvg: string, afterSvg: string): DiffResu
   const afterStrokes = parseStrokesFromSvg(afterSvg) ?? [];
   return diffComponents(beforeStrokes, afterStrokes);
 }
+
+export async function diffSvgComponentsAsync(
+  beforeSvg: string,
+  afterSvg: string,
+): Promise<DiffResult> {
+  const base = diffSvgComponents(beforeSvg, afterSvg);
+  const { diffSvgWithPixelVision } = await import('./refinePixelDiff');
+  return diffSvgWithPixelVision(beforeSvg, afterSvg, base);
+}
