@@ -11,6 +11,9 @@ import {
 import { parseStrokesFromSvg } from '../lib/serializeSvg';
 import { clearAutosave, saveAutosave } from '../canvas/useAutosave';
 import CheckpointStrip from '../timeline/CheckpointStrip';
+import ComparePickerBar, {
+  type ComparePickTarget,
+} from '../timeline/ComparePickerBar';
 import CheckpointViewer from '../timeline/CheckpointViewer';
 import Scrubber from '../timeline/Scrubber';
 import CompareView from '../timeline/CompareView';
@@ -46,10 +49,13 @@ export default function Timeline({
     null,
     null,
   ]);
+  const [comparePickTarget, setComparePickTarget] =
+    useState<ComparePickTarget>('before');
 
   useEffect(() => {
     setMode('view');
     setCompareIds([null, null]);
+    setComparePickTarget('before');
     setIndex(0);
   }, [projectId]);
 
@@ -116,17 +122,31 @@ export default function Timeline({
     [compareIds, checkpoints],
   );
 
-  function handleToggleCompare(id: string) {
+  function handleCompareSelect(id: string) {
     setCompareIds((prev) => {
-      const [a, b] = prev;
-      let next: [string | null, string | null];
-      if (a === id) next = [b, null];
-      else if (b === id) next = [a, null];
-      else if (!a) next = [id, b];
-      else if (!b) next = [a, id];
-      else next = [b, id];
-      return normalizeCompareIds(checkpoints, next);
+      const [beforeId, afterId] = normalizeCompareIds(checkpoints, prev);
+      if (comparePickTarget === 'before') {
+        const nextAfter = afterId === id ? null : afterId;
+        return normalizeCompareIds(checkpoints, [id, nextAfter]);
+      }
+      const nextBefore = beforeId === id ? null : beforeId;
+      return normalizeCompareIds(checkpoints, [nextBefore, id]);
     });
+  }
+
+  function enterCompareMode() {
+    setMode('compare');
+    if (checkpoints.length < 2) return;
+    setCompareIds((prev) => {
+      if (prev[0] || prev[1]) {
+        return normalizeCompareIds(checkpoints, prev);
+      }
+      return normalizeCompareIds(checkpoints, [
+        checkpoints[checkpoints.length - 2].id,
+        checkpoints[checkpoints.length - 1].id,
+      ]);
+    });
+    setComparePickTarget('after');
   }
 
   function seedAutosave(targetProjectId: string, svgData: string) {
@@ -218,15 +238,7 @@ export default function Timeline({
               role="tab"
               aria-selected={mode === 'compare'}
               className={`sf-timeline__modebtn ${mode === 'compare' ? 'is-active' : ''}`}
-              onClick={() => {
-                setMode('compare');
-                if (!compareIds[0] && !compareIds[1] && checkpoints.length >= 2) {
-                  setCompareIds([
-                    checkpoints[checkpoints.length - 2].id,
-                    checkpoints[checkpoints.length - 1].id,
-                  ]);
-                }
-              }}
+              onClick={enterCompareMode}
               disabled={checkpoints.length < 2}
               title={
                 checkpoints.length < 2
@@ -297,7 +309,7 @@ export default function Timeline({
           />
         ) : (
           <div className="sf-timeline__compare-hint">
-            Pick two checkpoints below to compare.
+            Choose Before and After below, then pick saves from the grid.
           </div>
         )}
       </div>
@@ -313,19 +325,30 @@ export default function Timeline({
         </div>
       )}
 
-      <CheckpointStrip
-        checkpoints={checkpoints}
-        selectedId={selected?.id ?? null}
-        onSelect={(id) => {
-          const i = checkpoints.findIndex((c) => c.id === id);
-          if (i >= 0) setIndex(i);
-        }}
-        mode={mode}
-        compareIds={compareIds}
-        onToggleCompare={handleToggleCompare}
-        branchesByCheckpoint={branchesByCheckpoint}
-        onOpenBranch={onOpenBranch}
-      />
+      <div className="sf-timeline__strip-area">
+        {mode === 'compare' && (
+          <ComparePickerBar
+            checkpoints={checkpoints}
+            before={compareBefore}
+            after={compareAfter}
+            pickTarget={comparePickTarget}
+            onPickTargetChange={setComparePickTarget}
+          />
+        )}
+        <CheckpointStrip
+          checkpoints={checkpoints}
+          selectedId={selected?.id ?? null}
+          onSelect={(id) => {
+            const i = checkpoints.findIndex((c) => c.id === id);
+            if (i >= 0) setIndex(i);
+          }}
+          mode={mode}
+          compareIds={compareIds}
+          onCompareSelect={handleCompareSelect}
+          branchesByCheckpoint={branchesByCheckpoint}
+          onOpenBranch={onOpenBranch}
+        />
+      </div>
     </div>
   );
 }

@@ -347,7 +347,7 @@ export default function CompareView({ left, right, checkpoints }: CompareViewPro
                         <span className="sf-diff__change-body">
                           <span className="sf-diff__change-title-row">
                             <span className="sf-diff__change-title mono">{title}</span>
-                            <span className={`sf-diff__change-kind sf-diff__change-kind--${c.kind}`}>
+                            <span className="sf-diff__change-kind">
                               {kindLabel(c.kind)}
                             </span>
                           </span>

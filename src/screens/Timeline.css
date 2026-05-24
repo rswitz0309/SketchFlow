@@ -132,6 +132,12 @@
 .sf-timeline__empty p { margin: 0; }
 .sf-timeline__empty-art { color: var(--muted); }
 
+.sf-timeline__strip-area {
+  flex-shrink: 0;
+  background: var(--surface-soft);
+  border-top: 1px solid var(--hairline);
+}
+
 .sf-timeline__compare-hint {
   color: var(--muted);
   font-style: italic;

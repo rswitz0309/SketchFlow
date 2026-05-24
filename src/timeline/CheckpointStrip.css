@@ -1,24 +1,26 @@
 .sf-strip {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(152px, 1fr));
   gap: var(--s-3);
-  overflow-x: auto;
-  overflow-y: hidden;
-  align-items: flex-start;
   padding: var(--s-3) var(--s-5) var(--s-4);
-  scroll-snap-type: x proximity;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: min(48vh, 440px);
+  align-content: start;
   scrollbar-width: thin;
 }
 
 .sf-strip__column {
-  flex: 0 0 200px;
   display: flex;
   flex-direction: column;
-  scroll-snap-align: start;
+  min-width: 0;
 }
 
 .sf-strip--empty {
+  display: flex;
   justify-content: center;
   align-items: center;
+  grid-column: 1 / -1;
   padding: var(--s-8) var(--s-5);
   color: var(--muted);
   font-style: italic;
@@ -34,7 +36,6 @@
   background: var(--surface);
   border: 1px solid var(--hairline);
   text-align: left;
-  scroll-snap-align: start;
   transition: transform var(--dur-fast) var(--ease-out),
               border-color var(--dur-fast) var(--ease-out),
               box-shadow var(--dur-fast) var(--ease-out);

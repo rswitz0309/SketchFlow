@@ -9,7 +9,7 @@ export interface CheckpointStripProps {
   onSelect: (id: string) => void;
   mode: 'view' | 'compare';
   compareIds?: [string | null, string | null];
-  onToggleCompare?: (id: string) => void;
+  onCompareSelect?: (id: string) => void;
   branchesByCheckpoint?: Map<string, ProjectBranch[]>;
   onOpenBranch?: (branchProjectId: string) => void;
 }
@@ -21,7 +21,7 @@ export default function CheckpointStrip(props: CheckpointStripProps) {
     onSelect,
     mode,
     compareIds,
-    onToggleCompare,
+    onCompareSelect,
     branchesByCheckpoint,
     onOpenBranch,
   } = props;
@@ -52,7 +52,7 @@ export default function CheckpointStrip(props: CheckpointStripProps) {
                 compareIndex !== null ? `is-compare-${compareIndex}` : ''
               }`}
               onClick={() => {
-                if (mode === 'compare' && onToggleCompare) onToggleCompare(c.id);
+                if (mode === 'compare' && onCompareSelect) onCompareSelect(c.id);
                 else onSelect(c.id);
               }}
               role="option"
