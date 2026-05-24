@@ -51,10 +51,14 @@ export default function SaveCheckpointButton(props: SaveCheckpointButtonProps) {
     }
   }, [state]);
 
+  const trimmedNote = note.trim();
+  const canSave = trimmedNote.length > 0;
+
   async function commit() {
+    if (!canSave) return;
     setState('saving');
     try {
-      await onSave(note.trim());
+      await onSave(trimmedNote);
       setNote('');
       setState('saved');
     } catch (e) {
@@ -71,9 +75,9 @@ export default function SaveCheckpointButton(props: SaveCheckpointButtonProps) {
         }`}
         onClick={() => {
           if (state === 'idle') setState('open');
-          else if (state === 'open') void commit();
+          else if (state === 'open' && canSave) void commit();
         }}
-        disabled={disabled || state === 'saving'}
+        disabled={disabled || state === 'saving' || (state === 'open' && !canSave)}
         aria-haspopup="dialog"
       >
         {state === 'saving' ? (
@@ -117,19 +121,21 @@ export default function SaveCheckpointButton(props: SaveCheckpointButtonProps) {
           aria-label="Save checkpoint"
         >
           <label className="sf-save__label" htmlFor="sf-save-note">
-            Add a note (optional)
+            Checkpoint message <span className="sf-save__required">(required)</span>
           </label>
           <input
             id="sf-save-note"
             ref={inputRef}
             className="sf-input sf-save__input"
-            placeholder="e.g. blocked in the background"
+            placeholder="e.g. moved sleeve to complete the dress"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') void commit();
+              if (e.key === 'Enter' && canSave) void commit();
             }}
             maxLength={120}
+            required
+            aria-required="true"
           />
           <div className="sf-save__row">
             <button
@@ -141,7 +147,11 @@ export default function SaveCheckpointButton(props: SaveCheckpointButtonProps) {
             >
               Cancel
             </button>
-            <button className="sf-btn sf-btn--primary" onClick={() => void commit()}>
+            <button
+              className="sf-btn sf-btn--primary"
+              onClick={() => void commit()}
+              disabled={!canSave}
+            >
               Save checkpoint
             </button>
           </div>

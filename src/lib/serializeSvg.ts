@@ -1,4 +1,5 @@
 import { CANVAS_BG, CANVAS_H, CANVAS_W, type Stroke } from '../types';
+import { sanitizeDrawableStrokes } from './strokeErase';
 
 function strokeAttrs(s: Stroke): string {
   const color = s.tool === 'eraser' ? CANVAS_BG : s.color;
@@ -39,6 +40,10 @@ function escapeForCdata(s: string): string {
   return s.replace(/]]>/g, ']]]]><![CDATA[>');
 }
 
+function drawableStrokes(strokes: Stroke[]): Stroke[] {
+  return sanitizeDrawableStrokes(strokes);
+}
+
 export function strokesToSvg(
   strokes: Stroke[],
   opts: { width?: number; height?: number; includeBg?: boolean } = {},
@@ -46,18 +51,19 @@ export function strokesToSvg(
   const width = opts.width ?? CANVAS_W;
   const height = opts.height ?? CANVAS_H;
   const includeBg = opts.includeBg ?? true;
+  const ink = drawableStrokes(strokes);
   const bg = includeBg
     ? `<rect width="100%" height="100%" fill="${CANVAS_BG}" />`
     : '';
-  const body = strokes.map(strokeToPath).join('');
+  const body = ink.map(strokeToPath).join('');
   const meta = `<metadata id="sf-strokes"><![CDATA[${escapeForCdata(
-    JSON.stringify(strokes),
+    JSON.stringify(ink),
   )}]]></metadata>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CANVAS_W} ${CANVAS_H}" width="${width}" height="${height}">${meta}${bg}${body}</svg>`;
 }
 
 export function strokesToInnerSvg(strokes: Stroke[]): string {
-  return strokes.map(strokeToPath).join('');
+  return drawableStrokes(strokes).map(strokeToPath).join('');
 }
 
 export function parseStrokesFromSvg(svgString: string): Stroke[] | null {
@@ -68,7 +74,7 @@ export function parseStrokesFromSvg(svgString: string): Stroke[] | null {
   try {
     const data = JSON.parse(match[1]);
     if (!Array.isArray(data)) return null;
-    return data as Stroke[];
+    return sanitizeDrawableStrokes(data as Stroke[]);
   } catch {
     return null;
   }

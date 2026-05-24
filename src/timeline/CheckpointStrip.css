@@ -55,6 +55,30 @@
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+.sf-strip__item.is-fork-origin {
+  border-color: #d97706;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.22);
+}
+.sf-strip__item.is-fork-origin.is-selected {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.28), var(--shadow-md);
+}
+
+.sf-strip__fork-badge {
+  position: absolute;
+  bottom: var(--s-1);
+  left: var(--s-1);
+  right: var(--s-1);
+  font-size: var(--size-12);
+  font-weight: 600;
+  color: #78350f;
+  background: #fde68a;
+  border-radius: var(--r-1);
+  padding: 2px 6px;
+  text-align: center;
+  line-height: 1.2;
+}
+
 .sf-strip__thumb {
   position: relative;
   width: 100%;

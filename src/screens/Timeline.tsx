@@ -9,6 +9,11 @@ import {
   listChildBranches,
 } from '../lib/storage';
 import { parseStrokesFromSvg } from '../lib/serializeSvg';
+import {
+  consumeForkTimelineFocus,
+  markForkForTimelineFocus,
+  resolveVariantForkCheckpointIndex,
+} from '../lib/variantFork';
 import { clearAutosave, saveAutosave } from '../canvas/useAutosave';
 import CheckpointStrip from '../timeline/CheckpointStrip';
 import ComparePickerBar, {
@@ -51,12 +56,14 @@ export default function Timeline({
   ]);
   const [comparePickTarget, setComparePickTarget] =
     useState<ComparePickTarget>('before');
+  const [forkHighlightIndex, setForkHighlightIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setMode('view');
     setCompareIds([null, null]);
     setComparePickTarget('before');
     setIndex(0);
+    setForkHighlightIndex(null);
   }, [projectId]);
 
   async function loadTimeline() {
@@ -74,9 +81,16 @@ export default function Timeline({
     setProject(p);
     setCheckpoints(cps);
     setChildBranches(branches);
-    setIndex(Math.max(0, cps.length - 1));
+
+    const forkIdx = await resolveVariantForkCheckpointIndex(p, cps);
+    setForkHighlightIndex(forkIdx);
+    if (forkIdx !== null && consumeForkTimelineFocus(projectId)) {
+      setIndex(forkIdx);
+    } else {
+      setIndex(Math.max(0, cps.length - 1));
+    }
     setCompareIds([null, null]);
-    return { p, cps, branches };
+    return { p, cps, branches, forkIdx };
   }
 
   useEffect(() => {
@@ -102,6 +116,10 @@ export default function Timeline({
 
   const selected = checkpoints[index] ?? null;
   const isLatest = checkpoints.length > 0 && index === checkpoints.length - 1;
+  const forkHighlightId =
+    forkHighlightIndex !== null ? (checkpoints[forkHighlightIndex]?.id ?? null) : null;
+  const selectedIsForkOrigin =
+    forkHighlightIndex !== null && index === forkHighlightIndex;
 
   const branchesByCheckpoint = useMemo(() => {
     const map = new Map<string, ProjectBranch[]>();
@@ -176,6 +194,7 @@ export default function Timeline({
       try {
         const branch = await createBranchFromCheckpoint(projectId, selected.id);
         seedAutosave(branch.id, selected.svgData);
+        markForkForTimelineFocus(branch.id);
         await loadTimeline();
         onOpenBranch(branch.id);
       } catch (e: unknown) {
@@ -265,6 +284,7 @@ export default function Timeline({
               checkpointIndex={index}
               checkpointCount={checkpoints.length}
               isLatest={isLatest}
+              isForkOrigin={selectedIsForkOrigin}
               branchingAvailable={branchingAvailable}
               existingBranches={branchesForSelected}
               branching={branching}
@@ -338,6 +358,7 @@ export default function Timeline({
         <CheckpointStrip
           checkpoints={checkpoints}
           selectedId={selected?.id ?? null}
+          highlightedId={forkHighlightId}
           onSelect={(id) => {
             const i = checkpoints.findIndex((c) => c.id === id);
             if (i >= 0) setIndex(i);
