@@ -102,8 +102,6 @@ function kindWord(kind: DiffChange['kind']): string {
       return 'removed';
     case 'mov':
       return 'moved';
-    case 'sty':
-      return 'restyled';
   }
 }
 
@@ -125,9 +123,7 @@ function localComponentDescription(c: DiffChange): string {
     case 'rem':
       return `You removed a drawn object from the ${region} area.`;
     case 'mov':
-      return `You repositioned an object in the ${region} region.`;
-    case 'sty':
-      return `You changed how an object looks in the ${region} area — color, size, or line weight.`;
+      return `You repositioned part of the drawing (${c.detail}).`;
   }
 }
 

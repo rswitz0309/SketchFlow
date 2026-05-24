@@ -2,17 +2,40 @@ import type { Stroke } from '../types';
 import { CANVAS_H, CANVAS_W } from '../types';
 import type { Bounds, ChangeKind, DiffChange, DiffResult } from './diffStrokes';
 import { parseStrokesFromSvg } from './serializeSvg';
+import {
+  reconcileDiffWithPath,
+  reconcileOpposingAddRem,
+  type DiffPathContext,
+  type ReconcileNotes,
+} from './diffPathReconcile';
+import { noteSuggestsRepositioning, moveIntentFromNote } from './checkpointNoteContext';
+import { inferMoveIntent, formatMoveIntentDetail } from './moveIntent';
+import {
+  clusterStrokesRelocatedToAfter,
+  clusterUnchangedInBefore,
+  clusterWasRelocated,
+  colorsSimilar,
+  estimateRigidMove,
+  extendUnchangedWithMicroMoves,
+  formatMoveDetail,
+  MICRO_MOVE_THRESHOLD,
+  pairUnchangedStrokes,
+  RELOCATED_SHAPE_THRESHOLD,
+  type RigidMoveEstimate,
+} from './strokeMatching';
 
 /** Merge strokes that visually read as one object (touching / nearly touching). */
 const MERGE_GAP = 22;
-/** Max centroid drift before we call it a move (not a tweak). */
-const MOVE_THRESHOLD = 24;
+/** Min rigid translation (px) to report a move — stroke-shape matching is primary. */
+const MOVE_THRESHOLD = 16;
 /** Max match distance — tighter = fewer false pairings across the canvas. */
-const COMPONENT_MATCH_DIST = 92;
+const COMPONENT_MATCH_DIST = 110;
 /** Min IoU to consider two clusters the same object when centroids are close. */
 const MIN_MATCH_IOU = 0.12;
 /** Looser match when reconciling would otherwise mark a still-visible stroke as removed. */
 const RELAXED_MATCH_DIST = 128;
+/** Match relocated objects even when centroids are far apart. */
+const RELOCATED_CLUSTER_MATCH_DIST = 220;
 /** Min overlap with any after stroke to treat a "removed" cluster as still present. */
 const PERSIST_IOU = 0.05;
 const PERSIST_CENTROID_DIST = 105;
@@ -101,24 +124,6 @@ function dist(a: [number, number], b: [number, number]): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1]);
 }
 
-function parseHex(color: string): [number, number, number] | null {
-  if (!color.startsWith('#') || color.length < 7) return null;
-  return [
-    parseInt(color.slice(1, 3), 16),
-    parseInt(color.slice(3, 5), 16),
-    parseInt(color.slice(5, 7), 16),
-  ];
-}
-
-/** Strokes that look like the same ink can merge; different hues stay separate objects. */
-function colorsSimilar(a: string, b: string): boolean {
-  if (a === b) return true;
-  const ca = parseHex(a);
-  const cb = parseHex(b);
-  if (!ca || !cb) return false;
-  return Math.hypot(ca[0] - cb[0], ca[1] - cb[1], ca[2] - cb[2]) < 72;
-}
-
 function strokeInkColor(s: Stroke): string {
   return s.tool === 'eraser' ? '__eraser__' : s.color;
 }
@@ -152,11 +157,6 @@ function dominantColor(strokes: Stroke[]): string {
   return best;
 }
 
-function avgSize(strokes: Stroke[]): number {
-  if (strokes.length === 0) return 0;
-  return strokes.reduce((s, st) => s + st.size, 0) / strokes.length;
-}
-
 function boundsArea(b: Bounds): number {
   return b.w * b.h;
 }
@@ -171,11 +171,16 @@ function areaRatio(a: Bounds, b: Bounds): number {
  * Group strokes into visual objects: one stroke stays alone unless it
  * nearly touches another stroke of similar color (reads as one shape).
  */
-function clusterStrokes(strokes: Stroke[]): Cluster[] {
+function clusterStrokes(strokes: Stroke[], excluded?: Set<number>): Cluster[] {
   const n = strokes.length;
   if (n === 0) return [];
 
-  const parent = Array.from({ length: n }, (_, i) => i);
+  const active = Array.from({ length: n }, (_, i) => i).filter(
+    (i) => !excluded?.has(i),
+  );
+  if (active.length === 0) return [];
+
+  const parent = Array.from({ length: active.length }, (_, i) => i);
   function find(i: number): number {
     while (parent[i] !== i) {
       parent[i] = parent[parent[i]];
@@ -189,32 +194,32 @@ function clusterStrokes(strokes: Stroke[]): Cluster[] {
     if (ri !== rj) parent[rj] = ri;
   }
 
-  const bounds = strokes.map((s) => strokeBounds(s));
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      if (!boxesNear(bounds[i], bounds[j], MERGE_GAP)) continue;
-      const ci = strokeInkColor(strokes[i]);
-      const cj = strokeInkColor(strokes[j]);
+  const bounds = active.map((i) => strokeBounds(strokes[i]));
+  for (let li = 0; li < active.length; li++) {
+    for (let lj = li + 1; lj < active.length; lj++) {
+      if (!boxesNear(bounds[li], bounds[lj], MERGE_GAP)) continue;
+      const ci = strokeInkColor(strokes[active[li]]);
+      const cj = strokeInkColor(strokes[active[lj]]);
       if (ci === '__eraser__' || cj === '__eraser__') {
-        union(i, j);
+        union(li, lj);
         continue;
       }
-      if (colorsSimilar(ci, cj)) union(i, j);
+      if (colorsSimilar(ci, cj)) union(li, lj);
     }
   }
 
   const groups = new Map<number, number[]>();
-  for (let i = 0; i < n; i++) {
-    const root = find(i);
+  for (let li = 0; li < active.length; li++) {
+    const root = find(li);
     const g = groups.get(root) ?? [];
-    g.push(i);
+    g.push(active[li]);
     groups.set(root, g);
   }
 
   return [...groups.values()].map((strokeIndices) => {
-    let merged = bounds[strokeIndices[0]];
+    let merged = strokeBounds(strokes[strokeIndices[0]]);
     for (let k = 1; k < strokeIndices.length; k++) {
-      merged = mergeBounds(merged, bounds[strokeIndices[k]]);
+      merged = mergeBounds(merged, strokeBounds(strokes[strokeIndices[k]]));
     }
     return { strokeIndices, bounds: merged };
   });
@@ -226,16 +231,25 @@ function clusterMatchScore(
   before: Cluster,
   after: Cluster,
 ): number {
+  const beforeMembers = before.strokeIndices.map((i) => beforeStrokes[i]);
+  const afterMembers = after.strokeIndices.map((i) => afterStrokes[i]);
+  const rigid = estimateRigidMove(
+    beforeMembers,
+    afterMembers,
+    MOVE_THRESHOLD,
+    RELOCATED_SHAPE_THRESHOLD,
+  );
+
+  if (rigid.confidence >= 0.42) {
+    return rigid.displacement * (1.1 - rigid.confidence * 0.35) - rigid.confidence * 52;
+  }
+
   const iou = boundsIoU(before.bounds, after.bounds);
   const cd = dist(clusterCentroid(before.bounds), clusterCentroid(after.bounds));
   if (iou < MIN_MATCH_IOU && cd > COMPONENT_MATCH_DIST * 0.65) return Infinity;
 
-  const beforeInk = dominantColor(
-    before.strokeIndices.map((i) => beforeStrokes[i]),
-  );
-  const afterInk = dominantColor(
-    after.strokeIndices.map((i) => afterStrokes[i]),
-  );
+  const beforeInk = dominantColor(beforeMembers);
+  const afterInk = dominantColor(afterMembers);
   if (!colorsSimilar(beforeInk, afterInk) && iou < 0.22) return Infinity;
 
   const areaDelta = areaRatio(before.bounds, after.bounds);
@@ -253,8 +267,6 @@ function kindLabel(kind: ChangeKind): string {
       return 'removed';
     case 'mov':
       return 'moved';
-    case 'sty':
-      return 'restyled';
   }
 }
 
@@ -278,6 +290,9 @@ function buildComponentDetail(
   beforeStrokes?: Stroke[],
   beforeBounds?: Bounds,
   afterBounds?: Bounds,
+  moveEstimate?: RigidMoveEstimate,
+  allAfterStrokes?: Stroke[],
+  saveNote?: string | null,
 ): string {
   const color = dominantColor(strokes);
   if (kind === 'add') {
@@ -286,22 +301,25 @@ function buildComponentDetail(
   if (kind === 'rem' && beforeStrokes) {
     return `was ${dominantColor(beforeStrokes)} · ${beforeStrokes.length} stroke${beforeStrokes.length === 1 ? '' : 's'}`;
   }
-  if (kind === 'mov' && beforeStrokes && beforeBounds && afterBounds) {
-    const [bx, by] = clusterCentroid(beforeBounds);
-    const [ax, ay] = clusterCentroid(afterBounds);
-    return `${dominantColor(strokes)} · (${Math.round(bx)}, ${Math.round(by)}) → (${Math.round(ax)}, ${Math.round(ay)})`;
-  }
-  if (kind === 'sty' && beforeStrokes && beforeBounds && afterBounds) {
-    const parts: string[] = [];
-    const bc = dominantColor(beforeStrokes);
-    const ac = dominantColor(strokes);
-    if (bc !== ac) parts.push(`${bc} → ${ac}`);
-    const bs = avgSize(beforeStrokes);
-    const as = avgSize(strokes);
-    if (Math.abs(bs - as) > 1) parts.push(`weight ${Math.round(bs)} → ${Math.round(as)}`);
-    const ar = areaRatio(beforeBounds, afterBounds);
-    if (ar > 0.18) parts.push(`size ${ar >= 0 ? '+' : ''}${Math.round(ar * 100)}%`);
-    return parts.length > 0 ? parts.join(' · ') : `${ac} · refined shape`;
+  if (kind === 'mov' && beforeStrokes && moveEstimate) {
+    const base = formatMoveDetail(
+      strokes,
+      moveEstimate,
+      dominantColor,
+      beforeBounds,
+      afterBounds,
+    );
+    const intent = moveIntentFromNote(
+      saveNote,
+      inferMoveIntent(
+        beforeBounds,
+        afterBounds ?? { x: 0, y: 0, w: 1, h: 1 },
+        beforeStrokes,
+        strokes,
+        allAfterStrokes ?? strokes,
+      ),
+    );
+    return formatMoveIntentDetail(base, intent);
   }
   return `${strokes.length} stroke${strokes.length === 1 ? '' : 's'}`;
 }
@@ -312,10 +330,13 @@ function clusterPersistsInAfter(
   memberStrokes: Stroke[],
   after: Stroke[],
 ): boolean {
+  const drawableAfter = after.filter((s) => s.tool !== 'eraser');
+  const rigid = estimateRigidMove(memberStrokes, drawableAfter, MOVE_THRESHOLD);
+  if (rigid.confidence >= 0.4) return true;
+
   const ink = dominantColor(memberStrokes);
   const centroid = clusterCentroid(bc.bounds);
-  for (const s of after) {
-    if (s.tool === 'eraser') continue;
+  for (const s of drawableAfter) {
     const b = strokeBounds(s);
     const iou = boundsIoU(bc.bounds, b);
     const d = dist(centroid, clusterCentroid(b));
@@ -332,17 +353,38 @@ function findBestUnmatchedAfter(
   afterClusters: Cluster[],
   matchedAfter: Set<number>,
 ): { ai: number; score: number } | null {
+  const beforeMemberStrokes = bc.strokeIndices.map((i) => before[i]);
   let bestAi = -1;
   let bestScore = Infinity;
   for (let ai = 0; ai < afterClusters.length; ai++) {
     if (matchedAfter.has(ai)) continue;
-    const score = clusterMatchScore(before, after, bc, afterClusters[ai]);
+    const ac = afterClusters[ai];
+    const afterMemberStrokes = ac.strokeIndices.map((i) => after[i]);
+    const rigid = estimateRigidMove(
+      beforeMemberStrokes,
+      afterMemberStrokes,
+      MOVE_THRESHOLD,
+      RELOCATED_SHAPE_THRESHOLD,
+    );
+    if (rigid.confidence >= 0.35) {
+      const score = rigid.displacement;
+      if (score < bestScore) {
+        bestScore = score;
+        bestAi = ai;
+      }
+      continue;
+    }
+    const score = clusterMatchScore(before, after, bc, ac);
     if (score < bestScore) {
       bestScore = score;
       bestAi = ai;
     }
   }
-  if (bestAi < 0 || bestScore >= RELAXED_MATCH_DIST) return null;
+  const maxDist =
+    bestScore < COMPONENT_MATCH_DIST * 1.5
+      ? RELAXED_MATCH_DIST
+      : RELOCATED_CLUSTER_MATCH_DIST;
+  if (bestAi < 0 || bestScore >= maxDist) return null;
   return { ai: bestAi, score: bestScore };
 }
 
@@ -351,23 +393,55 @@ function detectChangeKind(
   afterMemberStrokes: Stroke[],
   bc: Cluster,
   ac: Cluster,
-): ChangeKind | null {
-  const moved = dist(clusterCentroid(bc.bounds), clusterCentroid(ac.bounds)) > MOVE_THRESHOLD;
-  const colorChanged =
-    dominantColor(beforeMemberStrokes) !== dominantColor(afterMemberStrokes);
-  const weightChanged =
-    Math.abs(avgSize(beforeMemberStrokes) - avgSize(afterMemberStrokes)) > 1.5;
-  const sizeChanged = areaRatio(bc.bounds, ac.bounds) > 0.2;
-  const styled = colorChanged || weightChanged || sizeChanged;
+): { kind: ChangeKind | null; move: RigidMoveEstimate } {
+  const move = estimateRigidMove(
+    beforeMemberStrokes,
+    afterMemberStrokes,
+    MOVE_THRESHOLD,
+    RELOCATED_SHAPE_THRESHOLD,
+  );
 
-  if (moved) return 'mov';
-  if (styled) return 'sty';
-  return null;
+  if (move.isMove) {
+    return { kind: 'mov', move };
+  }
+
+  if (
+    move.confidence >= 0.5 &&
+    (move.displacement < MOVE_THRESHOLD || move.displacement < MICRO_MOVE_THRESHOLD)
+  ) {
+    return { kind: null, move };
+  }
+
+  const iou = boundsIoU(bc.bounds, ac.bounds);
+  if (iou >= 0.28 && move.confidence >= 0.35) {
+    return { kind: null, move };
+  }
+
+  const centroidDist = dist(clusterCentroid(bc.bounds), clusterCentroid(ac.bounds));
+  if (
+    centroidDist >= MOVE_THRESHOLD &&
+    move.confidence >= 0.38 &&
+    move.displacement >= MOVE_THRESHOLD * 0.7
+  ) {
+    return { kind: 'mov', move };
+  }
+
+  return { kind: null, move };
 }
 
-export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
-  const beforeClusters = clusterStrokes(before);
-  const afterClusters = clusterStrokes(after);
+export function diffComponents(
+  before: Stroke[],
+  after: Stroke[],
+  notes?: ReconcileNotes,
+): DiffResult {
+  const unchangedPairs = extendUnchangedWithMicroMoves(
+    before,
+    after,
+    pairUnchangedStrokes(before, after),
+  );
+
+  const beforeClusters = clusterStrokes(before, unchangedPairs.matchedBefore);
+  const afterClusters = clusterStrokes(after, unchangedPairs.matchedAfter);
 
   const pairs: { bi: number; ai: number; score: number }[] = [];
 
@@ -398,8 +472,15 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
   }
 
   const changes: DiffChange[] = [];
-  let unchangedCount = 0;
+  let unchangedCount = unchangedPairs.count;
   let colorIndex = 0;
+  const usedBeforeRelocated = new Set<number>(unchangedPairs.matchedBefore);
+  const usedAfterRelocated = new Set<number>(unchangedPairs.matchedAfter);
+  const noteBias = noteSuggestsRepositioning(notes?.afterNote ?? notes?.beforeNote);
+
+  function countMicroMoveUnchanged(strokes: Stroke[]): number {
+    return strokes.filter((s) => s.tool !== 'eraser').length;
+  }
 
   function pushChange(partial: Omit<DiffChange, 'color' | 'colorFill' | 'componentLabel'>) {
     const { stroke: color, fill: colorFill } = changeColorAt(colorIndex++);
@@ -416,11 +497,11 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
     const ac = afterClusters[ai];
     const beforeMemberStrokes = bc.strokeIndices.map((i) => before[i]);
     const afterMemberStrokes = ac.strokeIndices.map((i) => after[i]);
-    const kind = detectChangeKind(beforeMemberStrokes, afterMemberStrokes, bc, ac);
+    const { kind, move } = detectChangeKind(beforeMemberStrokes, afterMemberStrokes, bc, ac);
     const region = regionLabel(ac.bounds);
     const n = afterMemberStrokes.length;
 
-    if (!kind) {
+    if (!kind || move.displacement < MICRO_MOVE_THRESHOLD) {
       unchangedCount++;
       continue;
     }
@@ -435,6 +516,9 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
         beforeMemberStrokes,
         bc.bounds,
         ac.bounds,
+        move,
+        after,
+        notes?.afterNote,
       ),
       bounds: ac.bounds,
       beforeBounds: bc.bounds,
@@ -461,8 +545,12 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
       const ac = afterClusters[relaxed.ai];
       matchedAfter.add(relaxed.ai);
       const afterMemberStrokes = ac.strokeIndices.map((i) => after[i]);
-      const kind =
-        detectChangeKind(beforeMemberStrokes, afterMemberStrokes, bc, ac) ?? 'mov';
+      const detected = detectChangeKind(beforeMemberStrokes, afterMemberStrokes, bc, ac);
+      if (!detected.kind || detected.move.displacement < MICRO_MOVE_THRESHOLD) {
+        unchangedCount++;
+        continue;
+      }
+      const kind = detected.kind;
       const region = regionLabel(ac.bounds);
       pushChange({
         id: `comp-${kind}-${bi}-${relaxed.ai}`,
@@ -474,6 +562,9 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
           beforeMemberStrokes,
           bc.bounds,
           ac.bounds,
+          detected.move,
+          after,
+          notes?.afterNote,
         ),
         bounds: ac.bounds,
         beforeBounds: bc.bounds,
@@ -487,6 +578,52 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
 
     if (clusterPersistsInAfter(bc, beforeMemberStrokes, after)) {
       unchangedCount++;
+      continue;
+    }
+
+    const relocatedToAfter = clusterStrokesRelocatedToAfter(
+      beforeMemberStrokes,
+      after,
+      usedAfterRelocated,
+    );
+    if (relocatedToAfter) {
+      if (relocatedToAfter.displacement < MICRO_MOVE_THRESHOLD) {
+        unchangedCount += countMicroMoveUnchanged(beforeMemberStrokes);
+        continue;
+      }
+      const afterStrokesMoved =
+        relocatedToAfter.afterMemberStrokes ?? beforeMemberStrokes;
+      let afterBounds = strokeBounds(afterStrokesMoved[0]);
+      for (let k = 1; k < afterStrokesMoved.length; k++) {
+        afterBounds = mergeBounds(afterBounds, strokeBounds(afterStrokesMoved[k]));
+      }
+      const region = regionLabel(afterBounds);
+      pushChange({
+        id: `comp-mov-rem-${bi}`,
+        kind: 'mov',
+        summary: buildComponentSummary('mov', region, afterStrokesMoved.length),
+        detail: buildComponentDetail(
+          'mov',
+          afterStrokesMoved,
+          beforeMemberStrokes,
+          bc.bounds,
+          afterBounds,
+          relocatedToAfter,
+          after,
+          notes?.afterNote,
+        ),
+        bounds: afterBounds,
+        beforeBounds: bc.bounds,
+        strokeCount: afterStrokesMoved.length,
+        beforeStrokeCount: beforeMemberStrokes.length,
+        memberStrokes: afterStrokesMoved,
+        beforeMemberStrokes,
+      });
+      for (let ai = 0; ai < afterClusters.length; ai++) {
+        if (afterClusters[ai].strokeIndices.some((idx) => usedAfterRelocated.has(idx))) {
+          matchedAfter.add(ai);
+        }
+      }
       continue;
     }
 
@@ -506,6 +643,54 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
     if (matchedAfter.has(ai)) continue;
     const ac = afterClusters[ai];
     const strokes = ac.strokeIndices.map((i) => after[i]);
+
+    if (
+      clusterUnchangedInBefore(strokes, before, unchangedPairs.matchedBefore)
+    ) {
+      unchangedCount += strokes.filter((s) => s.tool !== 'eraser').length;
+      continue;
+    }
+
+    const relocated = clusterWasRelocated(strokes, before, usedBeforeRelocated);
+    if (relocated) {
+      if (relocated.displacement < MICRO_MOVE_THRESHOLD) {
+        unchangedCount += countMicroMoveUnchanged(strokes);
+        continue;
+      }
+    }
+    if (relocated && (relocated.isMove || noteBias)) {
+      let beforeBounds = strokeBounds(relocated.beforeMemberStrokes[0]);
+      for (let k = 1; k < relocated.beforeMemberStrokes.length; k++) {
+        beforeBounds = mergeBounds(
+          beforeBounds,
+          strokeBounds(relocated.beforeMemberStrokes[k]),
+        );
+      }
+      const region = regionLabel(ac.bounds);
+      pushChange({
+        id: `comp-mov-reloc-${ai}`,
+        kind: 'mov',
+        summary: buildComponentSummary('mov', region, strokes.length),
+        detail: buildComponentDetail(
+          'mov',
+          strokes,
+          relocated.beforeMemberStrokes,
+          beforeBounds,
+          ac.bounds,
+          relocated,
+          after,
+          notes?.afterNote,
+        ),
+        bounds: ac.bounds,
+        beforeBounds,
+        strokeCount: strokes.length,
+        beforeStrokeCount: relocated.beforeMemberStrokes.length,
+        memberStrokes: strokes,
+        beforeMemberStrokes: relocated.beforeMemberStrokes,
+      });
+      continue;
+    }
+
     const region = regionLabel(ac.bounds);
     pushChange({
       id: `comp-add-${ai}`,
@@ -518,23 +703,39 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
     });
   }
 
-  const order: ChangeKind[] = ['add', 'rem', 'mov', 'sty'];
+  const order: ChangeKind[] = ['add', 'rem', 'mov'];
   changes.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
 
-  return { changes, unchangedCount, beforeStrokes: before, afterStrokes: after };
+  let result = { changes, unchangedCount, beforeStrokes: before, afterStrokes: after };
+  result = reconcileOpposingAddRem(result, notes);
+  return result;
 }
 
-export function diffSvgComponents(beforeSvg: string, afterSvg: string): DiffResult {
+export function diffSvgComponents(
+  beforeSvg: string,
+  afterSvg: string,
+  path?: DiffPathContext,
+): DiffResult {
   const beforeStrokes = parseStrokesFromSvg(beforeSvg) ?? [];
   const afterStrokes = parseStrokesFromSvg(afterSvg) ?? [];
-  return diffComponents(beforeStrokes, afterStrokes);
+  const notes: ReconcileNotes | undefined = path
+    ? { beforeNote: path.beforeNote, afterNote: path.afterNote }
+    : undefined;
+  let result = diffComponents(beforeStrokes, afterStrokes, notes);
+  if (path && path.toIdx - path.fromIdx > 1) {
+    result = reconcileDiffWithPath(result, path);
+  }
+  return result;
 }
+
+export type { DiffPathContext } from './diffPathReconcile';
 
 export async function diffSvgComponentsAsync(
   beforeSvg: string,
   afterSvg: string,
+  path?: DiffPathContext,
 ): Promise<DiffResult> {
-  const base = diffSvgComponents(beforeSvg, afterSvg);
+  const base = diffSvgComponents(beforeSvg, afterSvg, path);
   const { diffSvgWithPixelVision } = await import('./refinePixelDiff');
   return diffSvgWithPixelVision(beforeSvg, afterSvg, base);
 }

@@ -263,7 +263,7 @@ export function buildIdentityHints(
     let fromRecentStep = false;
     let fromSaveNote = false;
 
-    if (afterNote && recentMatch && (c.kind === 'add' || c.kind === 'sty')) {
+    if (afterNote && recentMatch && c.kind === 'add') {
       suggested = afterNote;
       confidence = 'high';
       fromRecentStep = true;

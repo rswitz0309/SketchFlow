@@ -3,7 +3,11 @@ import { strokesToInnerSvg } from './serializeSvg';
 import { parseStrokesFromSvg } from './serializeSvg';
 import { diffSvgComponents, diffSvgComponentsAsync } from './diffComponents';
 
-export type ChangeKind = 'add' | 'rem' | 'mov' | 'sty';
+import type { DiffPathContext } from './diffPathReconcile';
+
+export type { DiffPathContext };
+
+export type ChangeKind = 'add' | 'rem' | 'mov';
 
 export interface Bounds {
   x: number;
@@ -26,9 +30,9 @@ export interface DiffChange {
   aiDescription?: string;
   strokeCount?: number;
   beforeStrokeCount?: number;
-  /** Strokes in the after-state component (add/mov/sty). */
+  /** Strokes in the after-state component (add/mov). */
   memberStrokes?: Stroke[];
-  /** Strokes in the before-state component (rem/mov/sty). */
+  /** Strokes in the before-state component (rem/mov). */
   beforeMemberStrokes?: Stroke[];
 }
 
@@ -40,13 +44,21 @@ export interface DiffResult {
 }
 
 /** Component-level diff (spatial clusters, not individual strokes). */
-export function diffSvg(beforeSvg: string, afterSvg: string): DiffResult {
-  return diffSvgComponents(beforeSvg, afterSvg);
+export function diffSvg(
+  beforeSvg: string,
+  afterSvg: string,
+  path?: DiffPathContext,
+): DiffResult {
+  return diffSvgComponents(beforeSvg, afterSvg, path);
 }
 
 /** Stroke clusters + pixel-diff vision refinement for sharper regions. */
-export function diffSvgAsync(beforeSvg: string, afterSvg: string): Promise<DiffResult> {
-  return diffSvgComponentsAsync(beforeSvg, afterSvg);
+export function diffSvgAsync(
+  beforeSvg: string,
+  afterSvg: string,
+  path?: DiffPathContext,
+): Promise<DiffResult> {
+  return diffSvgComponentsAsync(beforeSvg, afterSvg, path);
 }
 
 export function buildPanelSvg(strokes: Stroke[]): string {

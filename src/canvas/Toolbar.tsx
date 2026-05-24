@@ -62,6 +62,20 @@ const TOOLS: { id: Tool; label: string; icon: JSX.Element }[] = [
       </svg>
     ),
   },
+  {
+    id: 'select',
+    label: 'Select & move (Shift+click for multi)',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <path
+          d="M12 3l2.2 6.8H21l-5.5 4 2.1 6.8L12 16.6 6.4 20.6l2.1-6.8L3 9.8h6.8L12 3z"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
 ];
 
 export default function Toolbar(props: ToolbarProps) {
