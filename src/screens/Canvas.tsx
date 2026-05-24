@@ -8,7 +8,9 @@ import {
   saveCheckpoint,
 } from '../lib/storage';
 import { resolveWorkingStrokes } from '../lib/resolveWorkingStrokes';
+import { strokesFingerprint } from '../lib/strokeDigest';
 import { strokesToSvg } from '../lib/serializeSvg';
+import { parseStrokesFromSvg } from '../lib/serializeSvg';
 import { rasterizeSvgToPng } from '../lib/rasterize';
 import DrawingSurface from '../canvas/DrawingSurface';
 import Toolbar from '../canvas/Toolbar';
@@ -30,7 +32,7 @@ export default function Canvas({ projectId, onBack, onOpenTimeline }: CanvasProp
   const [color, setColor] = useState<string>(COLOR_SWATCHES[0]);
   const [size, setSize] = useState<number>(SIZE_OPTIONS[1]);
   const [lastCheckpointAt, setLastCheckpointAt] = useState<string | null>(null);
-  const [lastSavedStrokeCount, setLastSavedStrokeCount] = useState<number>(0);
+  const [lastSavedFingerprint, setLastSavedFingerprint] = useState<string>('');
   const [titleDraft, setTitleDraft] = useState<string>('');
   const [editingTitle, setEditingTitle] = useState(false);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
@@ -63,8 +65,13 @@ export default function Canvas({ projectId, onBack, onOpenTimeline }: CanvasProp
         if (initial.length > 0 && !(autosaved && autosaved.length > 0)) {
           saveAutosave(projectId, initial);
         }
-        setLastSavedStrokeCount(
-          autosaved && autosaved.length > 0 ? -1 : initial.length,
+        const checkpointStrokes = latest
+          ? (parseStrokesFromSvg(latest.svgData) ?? [])
+          : [];
+        const checkpointFp = strokesFingerprint(checkpointStrokes);
+        const workingFp = strokesFingerprint(initial);
+        setLastSavedFingerprint(
+          workingFp !== checkpointFp ? checkpointFp : workingFp,
         );
         setLoadedKey(projectId);
       } catch (e) {
@@ -81,13 +88,15 @@ export default function Canvas({ projectId, onBack, onOpenTimeline }: CanvasProp
     enabled: loadedKey === projectId,
   });
 
-  const isDirty = useMemo(() => {
-    if (lastSavedStrokeCount === -1) return history.strokes.length > 0;
-    return history.strokes.length !== lastSavedStrokeCount;
-  }, [history.strokes.length, lastSavedStrokeCount]);
+  const isDirty = useMemo(
+    () => strokesFingerprint(history.strokes) !== lastSavedFingerprint,
+    [history.strokes, lastSavedFingerprint],
+  );
 
   async function handleSave(note: string) {
     if (!project) return;
+    const trimmed = note.trim();
+    if (!trimmed) return;
     const svgString = strokesToSvg(history.strokes);
     let thumbnail: string | null = null;
     try {
@@ -99,10 +108,10 @@ export default function Canvas({ projectId, onBack, onOpenTimeline }: CanvasProp
       projectId: project.id,
       svgData: svgString,
       thumbnailDataUrl: thumbnail,
-      note: note || null,
+      note: trimmed,
     });
     setLastCheckpointAt(cp.createdAt);
-    setLastSavedStrokeCount(history.strokes.length);
+    setLastSavedFingerprint(strokesFingerprint(history.strokes));
   }
 
   async function handleTitleCommit() {
@@ -119,6 +128,7 @@ export default function Canvas({ projectId, onBack, onOpenTimeline }: CanvasProp
   }
 
   const handleStrokeComplete = (s: Stroke) => history.addStroke(s);
+  const handleErase = (eraser: Stroke) => history.applyEraser(eraser);
 
   if (!project || loadedKey !== projectId) {
     return (
@@ -220,6 +230,7 @@ export default function Canvas({ projectId, onBack, onOpenTimeline }: CanvasProp
         color={color}
         size={size}
         onStrokeComplete={handleStrokeComplete}
+        onErase={handleErase}
         onMoveStrokes={history.moveStrokes}
       />
     </div>

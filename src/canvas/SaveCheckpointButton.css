@@ -52,6 +52,12 @@
   font-weight: 600;
 }
 
+.sf-save__required {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+}
+
 .sf-save__input { width: 100%; }
 
 .sf-save__row {

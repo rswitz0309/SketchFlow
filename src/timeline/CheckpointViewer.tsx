@@ -1,6 +1,7 @@
 import type { Checkpoint, ProjectBranch } from '../types';
+import { parseStrokesFromSvg, strokesToSvg } from '../lib/serializeSvg';
 import { relativeTime } from '../lib/time';
-import BranchFork from './BranchFork';
+import { VariantOpenInline } from './BranchFork';
 import './CheckpointViewer.css';
 
 export interface CheckpointViewerProps {
@@ -8,6 +9,8 @@ export interface CheckpointViewerProps {
   checkpointIndex: number;
   checkpointCount: number;
   isLatest: boolean;
+  /** This save is where the variant was forked from (variant timeline only). */
+  isForkOrigin?: boolean;
   branchingAvailable?: boolean;
   existingBranches?: ProjectBranch[];
   branching?: boolean;
@@ -20,6 +23,7 @@ export default function CheckpointViewer({
   checkpointIndex,
   checkpointCount,
   isLatest,
+  isForkOrigin = false,
   branchingAvailable = true,
   existingBranches = [],
   branching = false,
@@ -27,22 +31,37 @@ export default function CheckpointViewer({
   onOpenBranch,
 }: CheckpointViewerProps) {
   const saveLabel = checkpointIndex + 1;
+  const parsed = parseStrokesFromSvg(checkpoint.svgData);
+  const displaySvg = parsed ? strokesToSvg(parsed) : checkpoint.svgData;
 
   return (
     <div className="sf-viewer">
       <div
         className="sf-viewer__frame"
-        dangerouslySetInnerHTML={{ __html: checkpoint.svgData }}
+        dangerouslySetInnerHTML={{ __html: displaySvg }}
       />
       <div className="sf-viewer__meta">
         <div className="sf-viewer__text">
           <div className="sf-viewer__note">
             {checkpoint.note?.trim() ? checkpoint.note : <em>No note</em>}
           </div>
-          <div className="sf-viewer__time">
-            Save {saveLabel} of {checkpointCount} · saved{' '}
-            {relativeTime(checkpoint.createdAt)}
+          <div className="sf-viewer__time-row">
+            <span className="sf-viewer__time">
+              Save {saveLabel} of {checkpointCount} · saved{' '}
+              {relativeTime(checkpoint.createdAt)}
+            </span>
+            {existingBranches.length > 0 && onOpenBranch && (
+              <VariantOpenInline
+                branches={existingBranches}
+                onOpenBranch={onOpenBranch}
+              />
+            )}
           </div>
+          {isForkOrigin && (
+            <p className="sf-viewer__fork-origin">
+              You branched from this save — it is highlighted in the timeline below.
+            </p>
+          )}
           {!isLatest && branchingAvailable && (
             <p className="sf-viewer__branch-hint">
               This is not your latest save. Continuing here creates a separate variant
@@ -68,12 +87,6 @@ export default function CheckpointViewer({
                 ? 'Creating variant…'
                 : 'Keep working from here'}
             </button>
-          )}
-          {existingBranches.length > 0 && onOpenBranch && (
-            <div className="sf-viewer__branches">
-              <span className="sf-viewer__branches-label">Variants from this save</span>
-              <BranchFork branches={existingBranches} onOpenBranch={onOpenBranch} />
-            </div>
           )}
         </div>
       </div>

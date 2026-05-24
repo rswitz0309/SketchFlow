@@ -12,9 +12,10 @@ import './Gallery.css';
 
 export interface GalleryProps {
   onOpenProject: (projectId: string, screen: 'canvas' | 'timeline') => void;
+  onOpenFamilyMap: (rootProjectId: string) => void;
 }
 
-export default function Gallery({ onOpenProject }: GalleryProps) {
+export default function Gallery({ onOpenProject, onOpenFamilyMap }: GalleryProps) {
   const [layout, setLayout] = useState<GalleryLayout | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,6 +92,7 @@ export default function Gallery({ onOpenProject }: GalleryProps) {
                   folder={folder}
                   onOpen={(id) => onOpenProject(id, 'canvas')}
                   onOpenTimeline={(id) => onOpenProject(id, 'timeline')}
+                  onOpenFamilyMap={() => onOpenFamilyMap(folder.root.id)}
                   onDelete={(id) => void handleDelete(id)}
                 />
               ))}

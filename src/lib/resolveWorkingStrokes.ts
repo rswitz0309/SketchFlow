@@ -1,5 +1,6 @@
 import type { Checkpoint, Stroke } from '../types';
 import { parseStrokesFromSvg } from './serializeSvg';
+import { sanitizeDrawableStrokes } from './strokeErase';
 
 /**
  * Prefer non-empty autosave (unsaved work), then the latest checkpoint SVG,
@@ -10,7 +11,7 @@ export function resolveWorkingStrokes(
   autosaved: Stroke[] | null,
   latestCheckpoint: Checkpoint | null,
 ): Stroke[] {
-  if (autosaved && autosaved.length > 0) return autosaved;
+  if (autosaved && autosaved.length > 0) return sanitizeDrawableStrokes(autosaved);
   if (latestCheckpoint?.svgData) {
     const fromCheckpoint = parseStrokesFromSvg(latestCheckpoint.svgData);
     if (fromCheckpoint && fromCheckpoint.length > 0) return fromCheckpoint;

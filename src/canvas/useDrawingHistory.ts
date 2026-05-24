@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import type { Stroke } from '../types';
+import { applyEraserToStrokes, sanitizeDrawableStrokes } from '../lib/strokeErase';
 import { translateStroke } from '../lib/strokeHitTest';
 
 const MAX_HISTORY = 200;
@@ -7,11 +8,13 @@ const MAX_HISTORY = 200;
 type UndoAction =
   | { type: 'add'; stroke: Stroke }
   | { type: 'move'; changes: { index: number; before: Stroke; after: Stroke }[] }
+  | { type: 'erase'; before: Stroke[]; after: Stroke[] }
   | { type: 'clear'; strokes: Stroke[] };
 
 export interface DrawingHistory {
   strokes: Stroke[];
   addStroke: (s: Stroke) => void;
+  applyEraser: (eraser: Stroke) => void;
   moveStroke: (index: number, dx: number, dy: number) => void;
   moveStrokes: (indices: number[], dx: number, dy: number) => void;
   undo: () => void;
@@ -32,14 +35,29 @@ export function useDrawingHistory(initial: Stroke[] = []): DrawingHistory {
 
   const addStroke = useCallback(
     (s: Stroke) => {
+      if (s.tool === 'eraser') return;
       redoStack.current = [];
       bumpStack();
       undoStack.current.push({ type: 'add', stroke: s });
       setStrokes((prev) => {
-        const next = prev.concat(s);
+        const next = sanitizeDrawableStrokes(prev.concat(s));
         if (next.length > MAX_HISTORY) {
           return next.slice(next.length - MAX_HISTORY);
         }
+        return next;
+      });
+    },
+    [bumpStack],
+  );
+
+  const applyEraser = useCallback(
+    (eraser: Stroke) => {
+      redoStack.current = [];
+      bumpStack();
+      setStrokes((prev) => {
+        const next = applyEraserToStrokes(prev, eraser);
+        if (next === prev) return prev;
+        undoStack.current.push({ type: 'erase', before: prev, after: next });
         return next;
       });
     },
@@ -84,6 +102,7 @@ export function useDrawingHistory(initial: Stroke[] = []): DrawingHistory {
     setStrokes((prev) => {
       if (action.type === 'add') return prev.slice(0, -1);
       if (action.type === 'clear') return action.strokes;
+      if (action.type === 'erase') return action.before;
       const next = prev.slice();
       for (const { index, before } of action.changes) {
         next[index] = before;
@@ -100,6 +119,7 @@ export function useDrawingHistory(initial: Stroke[] = []): DrawingHistory {
     setStrokes((prev) => {
       if (action.type === 'add') return prev.concat(action.stroke);
       if (action.type === 'clear') return [];
+      if (action.type === 'erase') return action.after;
       const next = prev.slice();
       for (const { index, after } of action.changes) {
         next[index] = after;
@@ -113,7 +133,7 @@ export function useDrawingHistory(initial: Stroke[] = []): DrawingHistory {
       undoStack.current = [];
       redoStack.current = [];
       bumpStack();
-      setStrokes(s);
+      setStrokes(sanitizeDrawableStrokes(s));
     },
     [bumpStack],
   );
@@ -132,6 +152,7 @@ export function useDrawingHistory(initial: Stroke[] = []): DrawingHistory {
   return {
     strokes,
     addStroke,
+    applyEraser,
     moveStroke,
     moveStrokes,
     undo,

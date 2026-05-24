@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Stroke, Tool } from '../types';
 import { CANVAS_BG, CANVAS_H, CANVAS_W } from '../types';
+import { isEraserArtifact } from '../lib/strokeErase';
 import { findStrokeAtPoint, translateStroke } from '../lib/strokeHitTest';
 import { pointsToSmoothPath } from '../lib/serializeSvg';
 import './DrawingSurface.css';
@@ -11,6 +12,7 @@ export interface DrawingSurfaceProps {
   color: string;
   size: number;
   onStrokeComplete: (stroke: Stroke) => void;
+  onErase: (eraser: Stroke) => void;
   onMoveStrokes: (indices: number[], dx: number, dy: number) => void;
 }
 
@@ -21,9 +23,10 @@ interface StrokeRenderProps {
 }
 
 function StrokePath({ stroke, highlighted, dimmed }: StrokeRenderProps) {
-  const color = stroke.tool === 'eraser' ? CANVAS_BG : stroke.color;
+  const isEraserPreview = stroke.tool === 'eraser';
+  const color = isEraserPreview ? 'rgba(15, 23, 42, 0.22)' : stroke.color;
   const width = stroke.tool === 'brush' ? stroke.size * 1.15 : stroke.size;
-  const opacity = dimmed ? 0.35 : stroke.tool === 'brush' ? 0.85 : 1;
+  const opacity = dimmed ? 0.35 : isEraserPreview ? 1 : stroke.tool === 'brush' ? 0.85 : 1;
 
   if (stroke.points.length === 0) return null;
 
@@ -72,7 +75,7 @@ function isMultiSelectKey(e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boo
 }
 
 export default function DrawingSurface(props: DrawingSurfaceProps) {
-  const { strokes, tool, color, size, onStrokeComplete, onMoveStrokes } = props;
+  const { strokes, tool, color, size, onStrokeComplete, onErase, onMoveStrokes } = props;
   const svgRef = useRef<SVGSVGElement>(null);
   const pointsRef = useRef<[number, number][] | null>(null);
   const dragRef = useRef<{
@@ -142,7 +145,11 @@ export default function DrawingSurface(props: DrawingSurfaceProps) {
       bumpRender();
       return;
     }
-    onStrokeComplete({ tool, color, size, points: pts });
+    if (tool === 'eraser') {
+      onErase({ tool: 'eraser', color, size, points: pts });
+    } else {
+      onStrokeComplete({ tool, color, size, points: pts });
+    }
     bumpRender();
   }
 
@@ -313,14 +320,16 @@ export default function DrawingSurface(props: DrawingSurfaceProps) {
           data-render-tick={renderTick}
         >
           <rect width={CANVAS_W} height={CANVAS_H} fill={CANVAS_BG} />
-          {displayStrokes.map((s, i) => (
-            <StrokePath
-              key={i}
-              stroke={s}
-              highlighted={tool === 'select' && activeSet.has(i)}
-              dimmed={tool === 'select' && activeSet.size > 0 && !activeSet.has(i)}
-            />
-          ))}
+          {displayStrokes.map((s, i) =>
+            isEraserArtifact(s) ? null : (
+              <StrokePath
+                key={i}
+                stroke={s}
+                highlighted={tool === 'select' && activeSet.has(i)}
+                dimmed={tool === 'select' && activeSet.size > 0 && !activeSet.has(i)}
+              />
+            ),
+          )}
           {inProgressStroke && <StrokePath stroke={inProgressStroke} />}
         </svg>
       </div>

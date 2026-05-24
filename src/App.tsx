@@ -2,10 +2,12 @@ import { useState } from 'react';
 import Gallery from './screens/Gallery';
 import Canvas from './screens/Canvas';
 import Timeline from './screens/Timeline';
+import FamilyGraph from './screens/FamilyGraph';
 import './App.css';
 
 type Route =
   | { screen: 'gallery' }
+  | { screen: 'family'; rootProjectId: string }
   | { screen: 'canvas'; projectId: string }
   | { screen: 'timeline'; projectId: string };
 
@@ -21,11 +23,13 @@ export default function App() {
   }
 
   const screen = route.screen;
+  const topbarScreen =
+    screen === 'family' ? 'gallery' : screen;
 
   return (
     <div className="sf-app">
       <Topbar
-        current={screen}
+        current={topbarScreen}
         onHome={backToGallery}
         onCanvas={
           screen === 'timeline'
@@ -40,7 +44,22 @@ export default function App() {
       />
 
       <main className="sf-app__main">
-        {screen === 'gallery' && <Gallery onOpenProject={openProject} />}
+        {screen === 'gallery' && (
+          <Gallery
+            onOpenProject={openProject}
+            onOpenFamilyMap={(rootProjectId) =>
+              setRoute({ screen: 'family', rootProjectId })
+            }
+          />
+        )}
+        {screen === 'family' && (
+          <FamilyGraph
+            key={route.rootProjectId}
+            rootProjectId={route.rootProjectId}
+            onBack={backToGallery}
+            onOpenProject={openProject}
+          />
+        )}
         {screen === 'canvas' && (
           <Canvas
             key={route.projectId}

@@ -1,11 +1,14 @@
+import { useEffect, useRef } from 'react';
 import type { Checkpoint, ProjectBranch } from '../types';
 import { relativeTime } from '../lib/time';
-import BranchFork from './BranchFork';
+import { VariantOpenInline } from './BranchFork';
 import './CheckpointStrip.css';
 
 export interface CheckpointStripProps {
   checkpoints: Checkpoint[];
   selectedId: string | null;
+  /** Persistent highlight for the save this variant was forked from. */
+  highlightedId?: string | null;
   onSelect: (id: string) => void;
   mode: 'view' | 'compare';
   compareIds?: [string | null, string | null];
@@ -18,6 +21,7 @@ export default function CheckpointStrip(props: CheckpointStripProps) {
   const {
     checkpoints,
     selectedId,
+    highlightedId,
     onSelect,
     mode,
     compareIds,
@@ -25,6 +29,17 @@ export default function CheckpointStrip(props: CheckpointStripProps) {
     branchesByCheckpoint,
     onOpenBranch,
   } = props;
+
+  const highlightRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!highlightedId || mode !== 'view') return;
+    highlightRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    });
+  }, [highlightedId, mode, checkpoints.length]);
 
   if (checkpoints.length === 0) {
     return (
@@ -40,6 +55,7 @@ export default function CheckpointStrip(props: CheckpointStripProps) {
         const isCompareA = compareIds?.[0] === c.id;
         const isCompareB = compareIds?.[1] === c.id;
         const isSelected = mode === 'view' ? selectedId === c.id : false;
+        const isForkHighlight = mode === 'view' && highlightedId === c.id;
         const compareIndex = isCompareA ? 0 : isCompareB ? 1 : null;
         const compareLabel =
           compareIndex === 0 ? 'Before' : compareIndex === 1 ? 'After' : null;
@@ -48,9 +64,10 @@ export default function CheckpointStrip(props: CheckpointStripProps) {
         return (
           <div key={c.id} className="sf-strip__column">
             <button
+              ref={isForkHighlight ? highlightRef : undefined}
               className={`sf-strip__item ${isSelected ? 'is-selected' : ''} ${
-                compareIndex !== null ? `is-compare-${compareIndex}` : ''
-              }`}
+                isForkHighlight ? 'is-fork-origin' : ''
+              } ${compareIndex !== null ? `is-compare-${compareIndex}` : ''}`}
               onClick={() => {
                 if (mode === 'compare' && onCompareSelect) onCompareSelect(c.id);
                 else onSelect(c.id);
@@ -68,18 +85,23 @@ export default function CheckpointStrip(props: CheckpointStripProps) {
                 {compareLabel && (
                   <span className="sf-strip__compare-badge">{compareLabel}</span>
                 )}
+                {isForkHighlight && (
+                  <span className="sf-strip__fork-badge">Variant start</span>
+                )}
                 <span className="sf-strip__num">{i + 1}</span>
               </div>
               <div className="sf-strip__meta">
                 <span className="sf-strip__note">
                   {c.note?.trim() ? c.note : <em>No note</em>}
                 </span>
-                <span className="sf-strip__time">{relativeTime(c.createdAt)}</span>
+                <div className="sf-strip__meta-row">
+                  <span className="sf-strip__time">{relativeTime(c.createdAt)}</span>
+                  {mode === 'view' && branches.length > 0 && onOpenBranch && (
+                    <VariantOpenInline branches={branches} onOpenBranch={onOpenBranch} />
+                  )}
+                </div>
               </div>
             </button>
-            {mode === 'view' && branches.length > 0 && onOpenBranch && (
-              <BranchFork branches={branches} onOpenBranch={onOpenBranch} />
-            )}
           </div>
         );
       })}
