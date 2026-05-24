@@ -90,16 +90,6 @@
   opacity: 0.45;
 }
 
-.sf-diff__pill-swatch {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-}
-.sf-diff__pill--add .sf-diff__pill-swatch { background: var(--add); }
-.sf-diff__pill--rem .sf-diff__pill-swatch { background: var(--rem); }
-.sf-diff__pill--mov .sf-diff__pill-swatch { background: var(--mov); }
-.sf-diff__pill--sty .sf-diff__pill-swatch { background: var(--sty); }
-
 .sf-diff__count {
   margin-left: auto;
   font-size: var(--size-11);

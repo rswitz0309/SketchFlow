@@ -3,12 +3,65 @@ import OpenAI from 'openai';
 import type { Checkpoint } from '../types';
 import type { DiffChange } from './diffStrokes';
 import { renderComponentPairCrops } from './componentRender';
+import {
+  formatIdentityHintsForPrompt,
+  type IdentityHint,
+} from './objectTracking';
+import { buildSceneContextPrompt, formatPathNotesForPrompt } from './objectTracking';
+import { guardSemanticLabel } from './semanticGuard';
+import { inferShapeHint } from './shapeHints';
 import { relativeTime } from './time';
 
 const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
 const MAX_VISION_COMPONENTS = 8;
+
+function changeVisualWeight(c: DiffChange): number {
+  return c.bounds.w * c.bounds.h;
+}
+
+function pickChangesForVision(changes: DiffChange[]): DiffChange[] {
+  return [...changes]
+    .sort((a, b) => changeVisualWeight(b) - changeVisualWeight(a))
+    .slice(0, MAX_VISION_COMPONENTS);
+}
+
+function formatBounds(c: DiffChange): string {
+  const b = c.bounds;
+  return `${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.w)}×${Math.round(b.h)}`;
+}
+
+function mergeAnalyses(
+  changes: DiffChange[],
+  parsed: ComponentAnalysis[],
+  identityHints?: Map<string, IdentityHint>,
+): ComponentAnalysis[] {
+  const byId = new Map(parsed.map((p) => [p.id, p]));
+  const byIndex = parsed;
+  return changes.map((c, i) => {
+    const hit = byId.get(c.id) ?? byIndex[i];
+    const hint = identityHints?.get(c.id);
+    const strokes = c.memberStrokes ?? c.beforeMemberStrokes ?? [];
+    const shapeFallback = inferShapeHint(strokes, c.bounds) ?? c.componentLabel;
+    const fallbackLabel = hint?.suggestedLabel ?? shapeFallback;
+
+    if (hit) {
+      return {
+        id: c.id,
+        label: guardSemanticLabel(hit.label, fallbackLabel, c, hint),
+        description: hit.description || localComponentDescription(c),
+        beforeDescription: hit.beforeDescription ?? undefined,
+        afterDescription: hit.afterDescription ?? undefined,
+      };
+    }
+    return {
+      id: c.id,
+      label: guardSemanticLabel(undefined, fallbackLabel, c, hint),
+      description: localComponentDescription(c),
+    };
+  });
+}
 
 export function hasOpenAiKey(): boolean {
   return typeof OPENAI_KEY === 'string' && OPENAI_KEY.length > 0;
@@ -24,6 +77,15 @@ export interface ComponentAnalysis {
   description: string;
   beforeDescription?: string;
   afterDescription?: string;
+}
+
+export interface DiffAnalysisContext {
+  /** Step-by-step edits between consecutive saves (for distant comparisons). */
+  pathContext?: string;
+  /** Per-change labels from timeline tracking + geometry. */
+  identityHints?: Map<string, IdentityHint>;
+  /** Full timeline for save-note span text. */
+  checkpoints?: Checkpoint[];
 }
 
 function stripDataUrl(dataUrl: string | null): string | null {
@@ -88,7 +150,9 @@ async function buildVisionContent(
   changes: DiffChange[],
   before: Checkpoint,
   after: Checkpoint,
+  ctx: DiffAnalysisContext,
 ): Promise<OpenAI.Chat.Completions.ChatCompletionContentPart[]> {
+  const { pathContext, identityHints, checkpoints } = ctx;
   const parts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
 
   const beforeFull = stripDataUrl(before.thumbnailDataUrl);
@@ -96,17 +160,17 @@ async function buildVisionContent(
   if (beforeFull) {
     parts.push({
       type: 'image_url',
-      image_url: { url: `data:image/png;base64,${beforeFull}`, detail: 'low' },
+      image_url: { url: `data:image/png;base64,${beforeFull}`, detail: 'high' },
     });
   }
   if (afterFull) {
     parts.push({
       type: 'image_url',
-      image_url: { url: `data:image/png;base64,${afterFull}`, detail: 'low' },
+      image_url: { url: `data:image/png;base64,${afterFull}`, detail: 'high' },
     });
   }
 
-  const cropChanges = changes.slice(0, MAX_VISION_COMPONENTS);
+  const cropChanges = pickChangesForVision(changes);
   for (const c of cropChanges) {
     const { before: beforeCrop, after: afterCrop } = await renderComponentPairCrops(
       c.beforeMemberStrokes,
@@ -131,18 +195,19 @@ async function buildVisionContent(
   const beforeNote = before.note?.trim() ? ` ("${before.note.trim()}")` : '';
   const afterNote = after.note?.trim() ? ` ("${after.note.trim()}")` : '';
 
+  const cropIds = new Set(cropChanges.map((c) => c.id));
   const changeLines = changes.map((c, i) => {
-    const cropNote =
-      i < MAX_VISION_COMPONENTS
-        ? ' [cropped before/after pair may follow for this id]'
-        : '';
-    return `${i + 1}. id=${c.id} | ${kindWord(c.kind)} | canvas region=${c.componentLabel} | ${c.detail}${cropNote}`;
+    const cropNote = cropIds.has(c.id)
+      ? ' [cropped before/after pair follows for this id]'
+      : '';
+    return `${i + 1}. id=${c.id} | ${kindWord(c.kind)} | region=${c.componentLabel} | ${c.summary} | ${c.detail} | box=${formatBounds(c)}${cropNote}`;
   });
 
   parts.push({
     type: 'text',
     text: [
-      'You analyze hand-drawn sketch diffs using computer vision.',
+      'You analyze hand-drawn sketch diffs using computer vision on raster images.',
+      'Change regions were pre-detected with pixel-level before/after comparison — trust the images over guesswork.',
       'The first image(s) are the full BEFORE and AFTER checkpoints (if present).',
       'Additional image pairs are zoomed crops of individual changed objects (before then after when both exist).',
       '',
@@ -154,12 +219,29 @@ async function buildVisionContent(
       '  "afterDescription": "<what it looks like after: shape, size, color, position — omit or null if removed>",',
       '  "description": "<one friendly sentence to the artist summarizing the change>" }',
       '',
-      'Be specific about shape, size, color, and position. Name what it likely depicts. Do not invent changes not listed.',
+      'Be specific about shape, size, color, and position in the AFTER image.',
+      'Only describe changes listed below — never invent strokes or regions that are not in the list.',
+      'If something still appears in the AFTER image (even moved or redrawn), do not describe it as removed.',
+      'Avoid generic labels: object, shape, element, blob, mark, random.',
+      'When identity hints or save notes are provided, treat them as authoritative.',
+      'For distant comparisons, the path context describes how the drawing evolved — labels must stay consistent with that history.',
+      'Use the exact id string from each line in your JSON response.',
       '',
       `Before${beforeNote} — ${relativeTime(before.createdAt)}`,
       `After${afterNote} — ${relativeTime(after.createdAt)}`,
+      (() => {
+        const scene = buildSceneContextPrompt(after);
+        return scene ? `\n${scene}\n` : '';
+      })(),
+      pathContext ? `\n${pathContext}\n` : '',
+      checkpoints && checkpoints.length > 0
+        ? `\n${formatPathNotesForPrompt(checkpoints, before, after)}\n`
+        : '',
+      identityHints && identityHints.size > 0
+        ? `\n${formatIdentityHintsForPrompt(changes, identityHints, Boolean(after.note?.trim()))}\n`
+        : '',
       '',
-      'Changes:',
+      'Changes (final diff between the two endpoints above):',
       changeLines.join('\n'),
     ].join('\n'),
   });
@@ -172,14 +254,15 @@ export async function analyzeDiffComponents(
   changes: DiffChange[],
   before: Checkpoint,
   after: Checkpoint,
+  ctx: DiffAnalysisContext = {},
 ): Promise<ComponentAnalysis[]> {
   if (changes.length === 0) return [];
 
   if (!hasOpenAiKey()) {
     if (typeof ANTHROPIC_KEY === 'string' && ANTHROPIC_KEY.length > 0) {
-      return analyzeDiffComponentsAnthropic(changes, before, after);
+      return analyzeDiffComponentsAnthropic(changes, before, after, ctx);
     }
-    return buildLocalComponentAnalysis(changes);
+    return mergeAnalyses(changes, buildLocalComponentAnalysis(changes), ctx.identityHints);
   }
 
   try {
@@ -188,11 +271,11 @@ export async function analyzeDiffComponents(
       dangerouslyAllowBrowser: true,
     });
 
-    const content = await buildVisionContent(changes, before, after);
+    const content = await buildVisionContent(changes, before, after, ctx);
 
     const msg = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      max_tokens: 1200,
+      model: 'gpt-4o',
+      max_tokens: 1400,
       messages: [{ role: 'user', content }],
     });
 
@@ -200,36 +283,22 @@ export async function analyzeDiffComponents(
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]) as ComponentAnalysis[];
-      const byId = new Map(parsed.map((p) => [p.id, p]));
-      return changes.map((c) => {
-        const hit = byId.get(c.id);
-        return hit
-          ? {
-              id: c.id,
-              label: hit.label,
-              description: hit.description,
-              beforeDescription: hit.beforeDescription ?? undefined,
-              afterDescription: hit.afterDescription ?? undefined,
-            }
-          : {
-              id: c.id,
-              label: c.componentLabel,
-              description: localComponentDescription(c),
-            };
-      });
+      return mergeAnalyses(changes, parsed, ctx.identityHints);
     }
   } catch (err) {
     console.warn('OpenAI component analysis failed, falling back:', err);
   }
 
-  return buildLocalComponentAnalysis(changes);
+  return mergeAnalyses(changes, buildLocalComponentAnalysis(changes), ctx.identityHints);
 }
 
 async function analyzeDiffComponentsAnthropic(
   changes: DiffChange[],
   before: Checkpoint,
   after: Checkpoint,
+  ctx: DiffAnalysisContext,
 ): Promise<ComponentAnalysis[]> {
+  const { pathContext, identityHints, checkpoints } = ctx;
   try {
     const client = new Anthropic({
       apiKey: ANTHROPIC_KEY,
@@ -256,11 +325,27 @@ async function analyzeDiffComponentsAnthropic(
       );
     }
 
+    const beforeNote = before.note?.trim() ? ` ("${before.note.trim()}")` : '';
+    const afterNote = after.note?.trim() ? ` ("${after.note.trim()}")` : '';
+
     content.push({
       type: 'text',
       text: [
-        'Analyze drawing diffs. Return JSON array: { id, label, beforeDescription, afterDescription, description }',
+        'Analyze drawing diffs along a save timeline. Return JSON array: { id, label, beforeDescription, afterDescription, description }',
+        `Before${beforeNote} — ${relativeTime(before.createdAt)}`,
+        `After${afterNote} — ${relativeTime(after.createdAt)}`,
+        pathContext ?? '',
+        checkpoints && checkpoints.length > 0
+          ? formatPathNotesForPrompt(checkpoints, before, after)
+          : '',
+        identityHints && identityHints.size > 0
+          ? formatIdentityHintsForPrompt(changes, identityHints, Boolean(after.note?.trim()))
+          : '',
+        buildSceneContextPrompt(after) ?? '',
+        'Final changes:',
         changeLines.join('\n'),
+        'Use identity hints and save notes when provided. Label changes as parts of the AFTER drawing.',
+        'Avoid generic placeholders (object, shape, blob, random).',
       ].join('\n'),
     });
 
@@ -279,16 +364,12 @@ async function analyzeDiffComponentsAnthropic(
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]) as ComponentAnalysis[];
-      const byId = new Map(parsed.map((p) => [p.id, p]));
-      return changes.map((c) => {
-        const hit = byId.get(c.id);
-        return hit ?? { id: c.id, label: c.componentLabel, description: localComponentDescription(c) };
-      });
+      return mergeAnalyses(changes, parsed, identityHints);
     }
   } catch (err) {
     console.warn('Anthropic component analysis failed:', err);
   }
-  return buildLocalComponentAnalysis(changes);
+  return mergeAnalyses(changes, buildLocalComponentAnalysis(changes), ctx.identityHints);
 }
 
 export async function generateDiffSummary(

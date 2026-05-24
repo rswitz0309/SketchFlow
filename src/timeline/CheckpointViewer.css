@@ -8,15 +8,14 @@
 }
 
 .sf-viewer__frame {
-  flex: 1;
-  min-height: 0;
   background: var(--bg);
   border: 1px solid var(--hairline);
   border-radius: var(--r-3);
   box-shadow: var(--shadow-md);
   aspect-ratio: 1600 / 1000;
   width: 100%;
-  max-width: min(100%, calc((100vh - 320px) * 1.6));
+  max-width: 100%;
+  max-height: min(85vh, 920px);
   margin: 0 auto;
   overflow: hidden;
   display: flex;

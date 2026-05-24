@@ -43,6 +43,7 @@ export default function App() {
         {screen === 'gallery' && <Gallery onOpenProject={openProject} />}
         {screen === 'canvas' && (
           <Canvas
+            key={route.projectId}
             projectId={route.projectId}
             onBack={backToGallery}
             onOpenTimeline={() =>
@@ -52,6 +53,7 @@ export default function App() {
         )}
         {screen === 'timeline' && (
           <Timeline
+            key={route.projectId}
             projectId={route.projectId}
             onBack={backToGallery}
             onOpenCanvas={() =>

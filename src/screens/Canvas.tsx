@@ -7,6 +7,7 @@ import {
   renameProject,
   saveCheckpoint,
 } from '../lib/storage';
+import { resolveWorkingStrokes } from '../lib/resolveWorkingStrokes';
 import { strokesToSvg } from '../lib/serializeSvg';
 import { rasterizeSvgToPng } from '../lib/rasterize';
 import DrawingSurface from '../canvas/DrawingSurface';
@@ -14,7 +15,7 @@ import Toolbar from '../canvas/Toolbar';
 import SaveCheckpointButton from '../canvas/SaveCheckpointButton';
 import StatusLine from '../canvas/StatusLine';
 import { useDrawingHistory } from '../canvas/useDrawingHistory';
-import { loadAutosave, useAutosave } from '../canvas/useAutosave';
+import { loadAutosave, saveAutosave, useAutosave } from '../canvas/useAutosave';
 import './Canvas.css';
 
 export interface CanvasProps {
@@ -57,8 +58,11 @@ export default function Canvas({ projectId, onBack, onOpenTimeline }: CanvasProp
         setLastCheckpointAt(latest?.createdAt ?? null);
 
         const autosaved = loadAutosave(projectId);
-        const initial = autosaved ?? [];
+        const initial = resolveWorkingStrokes(autosaved, latest);
         history.reset(initial);
+        if (initial.length > 0 && !(autosaved && autosaved.length > 0)) {
+          saveAutosave(projectId, initial);
+        }
         setLastSavedStrokeCount(
           autosaved && autosaved.length > 0 ? -1 : initial.length,
         );
@@ -73,7 +77,9 @@ export default function Canvas({ projectId, onBack, onOpenTimeline }: CanvasProp
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  useAutosave(projectId, history.strokes);
+  useAutosave(projectId, history.strokes, {
+    enabled: loadedKey === projectId,
+  });
 
   const isDirty = useMemo(() => {
     if (lastSavedStrokeCount === -1) return history.strokes.length > 0;

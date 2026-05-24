@@ -1,7 +1,7 @@
 import type { Stroke } from '../types';
 import { strokesToInnerSvg } from './serializeSvg';
 import { parseStrokesFromSvg } from './serializeSvg';
-import { diffSvgComponents } from './diffComponents';
+import { diffSvgComponents, diffSvgComponentsAsync } from './diffComponents';
 
 export type ChangeKind = 'add' | 'rem' | 'mov' | 'sty';
 
@@ -42,6 +42,11 @@ export interface DiffResult {
 /** Component-level diff (spatial clusters, not individual strokes). */
 export function diffSvg(beforeSvg: string, afterSvg: string): DiffResult {
   return diffSvgComponents(beforeSvg, afterSvg);
+}
+
+/** Stroke clusters + pixel-diff vision refinement for sharper regions. */
+export function diffSvgAsync(beforeSvg: string, afterSvg: string): Promise<DiffResult> {
+  return diffSvgComponentsAsync(beforeSvg, afterSvg);
 }
 
 export function buildPanelSvg(strokes: Stroke[]): string {
