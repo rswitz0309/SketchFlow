@@ -115,10 +115,6 @@ function Topbar({ current, onHome, onCanvas, onTimeline }: TopbarProps) {
         </span>
         <span className="sf-topbar__name">sketchflow</span>
       </button>
-      <span className="sf-topbar__subtitle mono">
-        a sketchbook that remembers every version of itself
-      </span>
-
       <nav className="sf-topbar__tabs" aria-label="Workspace">
         <button
           className={`sf-topbar__tab ${current === 'gallery' ? 'is-active' : ''}`}

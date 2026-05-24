@@ -55,9 +55,6 @@ export default function Gallery({ onOpenProject, onOpenFamilyMap }: GalleryProps
           <span className="sf-gallery__eyebrow">Gallery</span>
           <h1 className="sf-gallery__title">Your sketches</h1>
         </div>
-        <p className="sf-gallery__subtitle">
-          A sketchbook that remembers every version of itself.
-        </p>
       </header>
 
       {error && (
