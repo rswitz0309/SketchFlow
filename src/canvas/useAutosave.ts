@@ -23,16 +23,30 @@ export function clearAutosave(projectId: string): void {
   }
 }
 
+export function saveAutosave(projectId: string, strokes: Stroke[]): void {
+  try {
+    localStorage.setItem(KEY(projectId), JSON.stringify(strokes));
+  } catch (e) {
+    console.warn('Autosave failed', e);
+  }
+}
+
 export function useAutosave(
   projectId: string,
   strokes: Stroke[],
-  debounceMs = 400,
+  options: { debounceMs?: number; enabled?: boolean } = {},
 ): { lastSavedAt: number | null } {
+  const { debounceMs = 400, enabled = true } = options;
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const timer = useRef<number | null>(null);
   const firstRun = useRef(true);
 
   useEffect(() => {
+    firstRun.current = true;
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!enabled) return;
     if (firstRun.current) {
       firstRun.current = false;
       return;
@@ -50,7 +64,7 @@ export function useAutosave(
     return () => {
       if (timer.current) window.clearTimeout(timer.current);
     };
-  }, [projectId, strokes, debounceMs]);
+  }, [projectId, strokes, debounceMs, enabled]);
 
   return { lastSavedAt };
 }

@@ -123,31 +123,30 @@ export default function CompareView({ left, right }: CompareViewProps) {
   useEffect(() => {
     setSelectedId(null);
     setHoveredId(null);
+    setFilter('');
     setSummary(null);
     setAnalyses([]);
-  }, [left.id, right.id]);
-
-  useEffect(() => {
-    let cancelled = false;
     setAnalysisLoading(true);
     setSummaryLoading(true);
 
-    void analyzeDiffComponents(result.changes, left, right).then((comps) => {
+    let cancelled = false;
+    const changes = result.changes;
+
+    void (async () => {
+      const comps = await analyzeDiffComponents(changes, left, right);
       if (cancelled) return;
       setAnalyses(comps);
       setAnalysisLoading(false);
-      return generateDiffSummary(result.changes, left, right, comps);
-    }).then((text) => {
-      if (!cancelled && text) {
-        setSummary(text);
-        setSummaryLoading(false);
-      }
-    });
+      const text = await generateDiffSummary(changes, left, right, comps);
+      if (cancelled) return;
+      setSummary(text);
+      setSummaryLoading(false);
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [result.changes, left, right]);
+  }, [left.id, right.id, result.changes, left, right]);
 
   useEffect(() => {
     if (!hoveredId || !listRef.current) return;

@@ -1,16 +1,26 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Checkpoint } from '../types';
 import { generateProgressNotes, hasAiKey } from '../lib/ai';
 import './ProgressNotesPanel.css';
 
 export interface ProgressNotesPanelProps {
+  projectId: string;
   checkpoints: Checkpoint[];
 }
 
-export default function ProgressNotesPanel({ checkpoints }: ProgressNotesPanelProps) {
+export default function ProgressNotesPanel({
+  projectId,
+  checkpoints,
+}: ProgressNotesPanelProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [text, setText] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOpen(false);
+    setText(null);
+    setLoading(false);
+  }, [projectId]);
 
   async function run() {
     setLoading(true);

@@ -10,6 +10,45 @@ const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
 const MAX_VISION_COMPONENTS = 8;
 
+function changeVisualWeight(c: DiffChange): number {
+  return c.bounds.w * c.bounds.h;
+}
+
+function pickChangesForVision(changes: DiffChange[]): DiffChange[] {
+  return [...changes]
+    .sort((a, b) => changeVisualWeight(b) - changeVisualWeight(a))
+    .slice(0, MAX_VISION_COMPONENTS);
+}
+
+function formatBounds(c: DiffChange): string {
+  const b = c.bounds;
+  return `${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.w)}×${Math.round(b.h)}`;
+}
+
+function mergeAnalyses(
+  changes: DiffChange[],
+  parsed: ComponentAnalysis[],
+): ComponentAnalysis[] {
+  const byId = new Map(parsed.map((p) => [p.id, p]));
+  const byIndex = parsed;
+  return changes.map((c, i) => {
+    const hit = byId.get(c.id) ?? byIndex[i];
+    return hit
+      ? {
+          id: c.id,
+          label: hit.label || c.componentLabel,
+          description: hit.description || localComponentDescription(c),
+          beforeDescription: hit.beforeDescription ?? undefined,
+          afterDescription: hit.afterDescription ?? undefined,
+        }
+      : {
+          id: c.id,
+          label: c.componentLabel,
+          description: localComponentDescription(c),
+        };
+  });
+}
+
 export function hasOpenAiKey(): boolean {
   return typeof OPENAI_KEY === 'string' && OPENAI_KEY.length > 0;
 }
@@ -96,17 +135,17 @@ async function buildVisionContent(
   if (beforeFull) {
     parts.push({
       type: 'image_url',
-      image_url: { url: `data:image/png;base64,${beforeFull}`, detail: 'low' },
+      image_url: { url: `data:image/png;base64,${beforeFull}`, detail: 'high' },
     });
   }
   if (afterFull) {
     parts.push({
       type: 'image_url',
-      image_url: { url: `data:image/png;base64,${afterFull}`, detail: 'low' },
+      image_url: { url: `data:image/png;base64,${afterFull}`, detail: 'high' },
     });
   }
 
-  const cropChanges = changes.slice(0, MAX_VISION_COMPONENTS);
+  const cropChanges = pickChangesForVision(changes);
   for (const c of cropChanges) {
     const { before: beforeCrop, after: afterCrop } = await renderComponentPairCrops(
       c.beforeMemberStrokes,
@@ -131,12 +170,12 @@ async function buildVisionContent(
   const beforeNote = before.note?.trim() ? ` ("${before.note.trim()}")` : '';
   const afterNote = after.note?.trim() ? ` ("${after.note.trim()}")` : '';
 
+  const cropIds = new Set(cropChanges.map((c) => c.id));
   const changeLines = changes.map((c, i) => {
-    const cropNote =
-      i < MAX_VISION_COMPONENTS
-        ? ' [cropped before/after pair may follow for this id]'
-        : '';
-    return `${i + 1}. id=${c.id} | ${kindWord(c.kind)} | canvas region=${c.componentLabel} | ${c.detail}${cropNote}`;
+    const cropNote = cropIds.has(c.id)
+      ? ' [cropped before/after pair follows for this id]'
+      : '';
+    return `${i + 1}. id=${c.id} | ${kindWord(c.kind)} | region=${c.componentLabel} | ${c.summary} | ${c.detail} | box=${formatBounds(c)}${cropNote}`;
   });
 
   parts.push({
@@ -154,7 +193,9 @@ async function buildVisionContent(
       '  "afterDescription": "<what it looks like after: shape, size, color, position — omit or null if removed>",',
       '  "description": "<one friendly sentence to the artist summarizing the change>" }',
       '',
-      'Be specific about shape, size, color, and position. Name what it likely depicts. Do not invent changes not listed.',
+      'Be specific about shape, size, color, and position. Name what it likely depicts.',
+      'Only describe changes listed below — never invent strokes or objects that are not in the list.',
+      'Use the exact id string from each line in your JSON response.',
       '',
       `Before${beforeNote} — ${relativeTime(before.createdAt)}`,
       `After${afterNote} — ${relativeTime(after.createdAt)}`,
@@ -200,23 +241,7 @@ export async function analyzeDiffComponents(
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]) as ComponentAnalysis[];
-      const byId = new Map(parsed.map((p) => [p.id, p]));
-      return changes.map((c) => {
-        const hit = byId.get(c.id);
-        return hit
-          ? {
-              id: c.id,
-              label: hit.label,
-              description: hit.description,
-              beforeDescription: hit.beforeDescription ?? undefined,
-              afterDescription: hit.afterDescription ?? undefined,
-            }
-          : {
-              id: c.id,
-              label: c.componentLabel,
-              description: localComponentDescription(c),
-            };
-      });
+      return mergeAnalyses(changes, parsed);
     }
   } catch (err) {
     console.warn('OpenAI component analysis failed, falling back:', err);
@@ -279,11 +304,7 @@ async function analyzeDiffComponentsAnthropic(
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]) as ComponentAnalysis[];
-      const byId = new Map(parsed.map((p) => [p.id, p]));
-      return changes.map((c) => {
-        const hit = byId.get(c.id);
-        return hit ?? { id: c.id, label: c.componentLabel, description: localComponentDescription(c) };
-      });
+      return mergeAnalyses(changes, parsed);
     }
   } catch (err) {
     console.warn('Anthropic component analysis failed:', err);

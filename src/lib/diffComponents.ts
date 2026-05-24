@@ -4,13 +4,13 @@ import type { Bounds, ChangeKind, DiffChange, DiffResult } from './diffStrokes';
 import { parseStrokesFromSvg } from './serializeSvg';
 
 /** Merge strokes that visually read as one object (touching / nearly touching). */
-const MERGE_GAP = 28;
+const MERGE_GAP = 22;
 /** Max centroid drift before we call it a move (not a tweak). */
-const MOVE_THRESHOLD = 28;
-/** Max match distance — tighter = more add/remove pairs instead of false merges. */
-const COMPONENT_MATCH_DIST = 110;
+const MOVE_THRESHOLD = 24;
+/** Max match distance — tighter = fewer false pairings across the canvas. */
+const COMPONENT_MATCH_DIST = 92;
 /** Min IoU to consider two clusters the same object when centroids are close. */
-const MIN_MATCH_IOU = 0.08;
+const MIN_MATCH_IOU = 0.12;
 
 const CHANGE_PALETTE = [
   '#e11d48',
@@ -215,15 +215,29 @@ function clusterStrokes(strokes: Stroke[]): Cluster[] {
   });
 }
 
-function clusterMatchScore(before: Cluster, after: Cluster): number {
+function clusterMatchScore(
+  beforeStrokes: Stroke[],
+  afterStrokes: Stroke[],
+  before: Cluster,
+  after: Cluster,
+): number {
   const iou = boundsIoU(before.bounds, after.bounds);
   const cd = dist(clusterCentroid(before.bounds), clusterCentroid(after.bounds));
-  if (iou < MIN_MATCH_IOU && cd > COMPONENT_MATCH_DIST * 0.75) return Infinity;
+  if (iou < MIN_MATCH_IOU && cd > COMPONENT_MATCH_DIST * 0.65) return Infinity;
+
+  const beforeInk = dominantColor(
+    before.strokeIndices.map((i) => beforeStrokes[i]),
+  );
+  const afterInk = dominantColor(
+    after.strokeIndices.map((i) => afterStrokes[i]),
+  );
+  if (!colorsSimilar(beforeInk, afterInk) && iou < 0.22) return Infinity;
+
   const areaDelta = areaRatio(before.bounds, after.bounds);
   const strokeDelta =
     Math.abs(before.strokeIndices.length - after.strokeIndices.length) /
     Math.max(before.strokeIndices.length, after.strokeIndices.length, 1);
-  return cd * (1.1 - iou * 0.5) + areaDelta * 60 + strokeDelta * 24;
+  return cd * (1.15 - iou * 0.65) + areaDelta * 72 + strokeDelta * 28;
 }
 
 function kindLabel(kind: ChangeKind): string {
@@ -314,7 +328,12 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
 
   for (let bi = 0; bi < beforeClusters.length; bi++) {
     for (let ai = 0; ai < afterClusters.length; ai++) {
-      const score = clusterMatchScore(beforeClusters[bi], afterClusters[ai]);
+      const score = clusterMatchScore(
+        before,
+        after,
+        beforeClusters[bi],
+        afterClusters[ai],
+      );
       if (score < COMPONENT_MATCH_DIST) {
         pairs.push({ bi, ai, score });
       }

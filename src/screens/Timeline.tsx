@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Checkpoint, Project } from '../types';
 import { getProject, listCheckpoints } from '../lib/storage';
 import { parseStrokesFromSvg } from '../lib/serializeSvg';
-import { clearAutosave } from '../canvas/useAutosave';
+import { clearAutosave, saveAutosave } from '../canvas/useAutosave';
 import CheckpointStrip from '../timeline/CheckpointStrip';
 import CheckpointViewer from '../timeline/CheckpointViewer';
 import Scrubber from '../timeline/Scrubber';
@@ -36,6 +36,12 @@ export default function Timeline({
   ]);
 
   useEffect(() => {
+    setMode('view');
+    setCompareIds([null, null]);
+    setIndex(0);
+  }, [projectId]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -52,6 +58,7 @@ export default function Timeline({
         setProject(p);
         setCheckpoints(cps);
         setIndex(Math.max(0, cps.length - 1));
+        setCompareIds([null, null]);
       } catch (e: unknown) {
         if (cancelled) return;
         console.error(e);
@@ -92,9 +99,8 @@ export default function Timeline({
     if (!selected) return;
     try {
       const next = parseStrokesFromSvg(selected.svgData);
-      if (next) {
-        const KEY = `sketchflow:project:${projectId}:working`;
-        localStorage.setItem(KEY, JSON.stringify(next));
+      if (next && next.length > 0) {
+        saveAutosave(projectId, next);
       } else {
         clearAutosave(projectId);
       }
@@ -221,7 +227,7 @@ export default function Timeline({
             index={index}
             onIndexChange={setIndex}
           />
-          <ProgressNotesPanel checkpoints={checkpoints} />
+          <ProgressNotesPanel projectId={projectId} checkpoints={checkpoints} />
         </div>
       )}
 
