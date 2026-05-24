@@ -144,7 +144,16 @@
 }
 .sf-strip__note em { color: var(--muted); font-style: italic; }
 
+.sf-strip__meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
 .sf-strip__time {
   font-size: var(--size-12);
   color: var(--muted);
+  flex-shrink: 0;
 }

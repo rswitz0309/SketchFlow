@@ -1,0 +1,144 @@
+.sf-family {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: #eceae4;
+}
+
+.sf-family__header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-4);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+.sf-family__title {
+  margin: 0;
+  flex: 1;
+  font-size: var(--size-14);
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sf-family__hint {
+  font-size: var(--size-12);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.sf-family__msg {
+  padding: var(--s-8);
+  text-align: center;
+  color: var(--muted);
+  margin: 0;
+}
+
+.sf-family__viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  background-color: #eceae4;
+  background-image: radial-gradient(circle, rgba(61, 56, 50, 0.14) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.sf-family__viewport:active {
+  cursor: grabbing;
+}
+
+.sf-family__stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.sf-family__graph {
+  display: block;
+  overflow: visible;
+}
+
+.sf-family__edge {
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.45;
+  transition: opacity var(--dur-fast) var(--ease-out), stroke-width var(--dur-fast);
+}
+
+.sf-family__edge-g.is-active .sf-family__edge {
+  opacity: 0.95;
+  stroke-width: 2;
+}
+
+.sf-family__edge-label {
+  font-family: var(--font-sans);
+  font-size: 9px;
+  fill: var(--ink-3);
+  text-anchor: middle;
+  dominant-baseline: auto;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.sf-family__edge-g.is-active .sf-family__edge-label {
+  opacity: 1;
+  font-weight: 600;
+}
+
+.sf-family__node {
+  outline: none;
+}
+
+.sf-family__node:focus-visible .sf-family__dot {
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.sf-family__dot {
+  stroke: none;
+  transition: filter var(--dur-fast) var(--ease-out);
+}
+
+.sf-family__dot-halo {
+  stroke: rgba(61, 56, 50, 0.2);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.sf-family__node:hover .sf-family__dot,
+.sf-family__node.is-active .sf-family__dot {
+  filter: brightness(1.12);
+}
+
+.sf-family__node-label {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  text-anchor: start;
+  dominant-baseline: middle;
+  pointer-events: none;
+  opacity: 0.88;
+}
+
+.sf-family__node-label.is-root {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 1;
+}
+
+.sf-family__node:hover .sf-family__node-label,
+.sf-family__node.is-active .sf-family__node-label {
+  opacity: 1;
+  font-weight: 600;
+}

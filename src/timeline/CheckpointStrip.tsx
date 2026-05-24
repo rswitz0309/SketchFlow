@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Checkpoint, ProjectBranch } from '../types';
 import { relativeTime } from '../lib/time';
-import BranchFork from './BranchFork';
+import { VariantOpenInline } from './BranchFork';
 import './CheckpointStrip.css';
 
 export interface CheckpointStripProps {
@@ -94,12 +94,14 @@ export default function CheckpointStrip(props: CheckpointStripProps) {
                 <span className="sf-strip__note">
                   {c.note?.trim() ? c.note : <em>No note</em>}
                 </span>
-                <span className="sf-strip__time">{relativeTime(c.createdAt)}</span>
+                <div className="sf-strip__meta-row">
+                  <span className="sf-strip__time">{relativeTime(c.createdAt)}</span>
+                  {mode === 'view' && branches.length > 0 && onOpenBranch && (
+                    <VariantOpenInline branches={branches} onOpenBranch={onOpenBranch} />
+                  )}
+                </div>
               </div>
             </button>
-            {mode === 'view' && branches.length > 0 && onOpenBranch && (
-              <BranchFork branches={branches} onOpenBranch={onOpenBranch} />
-            )}
           </div>
         );
       })}
