@@ -7,7 +7,9 @@ import {
   formatIdentityHintsForPrompt,
   type IdentityHint,
 } from './objectTracking';
-import { inferShapeHint, sanitizeAiLabel } from './shapeHints';
+import { buildSceneContextPrompt, formatPathNotesForPrompt } from './objectTracking';
+import { guardSemanticLabel } from './semanticGuard';
+import { inferShapeHint } from './shapeHints';
 import { relativeTime } from './time';
 
 const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
@@ -47,7 +49,7 @@ function mergeAnalyses(
     if (hit) {
       return {
         id: c.id,
-        label: sanitizeAiLabel(hit.label, fallbackLabel),
+        label: guardSemanticLabel(hit.label, fallbackLabel, c, hint),
         description: hit.description || localComponentDescription(c),
         beforeDescription: hit.beforeDescription ?? undefined,
         afterDescription: hit.afterDescription ?? undefined,
@@ -55,7 +57,7 @@ function mergeAnalyses(
     }
     return {
       id: c.id,
-      label: sanitizeAiLabel(undefined, fallbackLabel),
+      label: guardSemanticLabel(undefined, fallbackLabel, c, hint),
       description: localComponentDescription(c),
     };
   });
@@ -82,6 +84,8 @@ export interface DiffAnalysisContext {
   pathContext?: string;
   /** Per-change labels from timeline tracking + geometry. */
   identityHints?: Map<string, IdentityHint>;
+  /** Full timeline for save-note span text. */
+  checkpoints?: Checkpoint[];
 }
 
 function stripDataUrl(dataUrl: string | null): string | null {
@@ -146,9 +150,9 @@ async function buildVisionContent(
   changes: DiffChange[],
   before: Checkpoint,
   after: Checkpoint,
-  pathContext?: string,
-  identityHints?: Map<string, IdentityHint>,
+  ctx: DiffAnalysisContext,
 ): Promise<OpenAI.Chat.Completions.ChatCompletionContentPart[]> {
+  const { pathContext, identityHints, checkpoints } = ctx;
   const parts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
 
   const beforeFull = stripDataUrl(before.thumbnailDataUrl);
@@ -215,17 +219,26 @@ async function buildVisionContent(
       '  "afterDescription": "<what it looks like after: shape, size, color, position — omit or null if removed>",',
       '  "description": "<one friendly sentence to the artist summarizing the change>" }',
       '',
-      'Be specific about shape, size, color, and position. Name body parts and figures when visible (leg, arm, head, eye, hand, etc.).',
-      'Only describe changes listed below — never invent strokes or objects that are not in the list.',
+      'Be specific about shape, size, color, and position in the AFTER image.',
+      'Only describe changes listed below — never invent strokes or regions that are not in the list.',
       'If something still appears in the AFTER image (even moved or redrawn), do not describe it as removed.',
-      'Never use generic labels: object, shape, element, random object, visual element, detail, blob.',
+      'Avoid generic labels: object, shape, element, blob, mark, random.',
+      'When identity hints or save notes are provided, treat them as authoritative.',
+      'For distant comparisons, the path context describes how the drawing evolved — labels must stay consistent with that history.',
       'Use the exact id string from each line in your JSON response.',
       '',
       `Before${beforeNote} — ${relativeTime(before.createdAt)}`,
       `After${afterNote} — ${relativeTime(after.createdAt)}`,
+      (() => {
+        const scene = buildSceneContextPrompt(after);
+        return scene ? `\n${scene}\n` : '';
+      })(),
       pathContext ? `\n${pathContext}\n` : '',
+      checkpoints && checkpoints.length > 0
+        ? `\n${formatPathNotesForPrompt(checkpoints, before, after)}\n`
+        : '',
       identityHints && identityHints.size > 0
-        ? `\n${formatIdentityHintsForPrompt(changes, identityHints)}\n`
+        ? `\n${formatIdentityHintsForPrompt(changes, identityHints, Boolean(after.note?.trim()))}\n`
         : '',
       '',
       'Changes (final diff between the two endpoints above):',
@@ -245,13 +258,11 @@ export async function analyzeDiffComponents(
 ): Promise<ComponentAnalysis[]> {
   if (changes.length === 0) return [];
 
-  const { pathContext, identityHints } = ctx;
-
   if (!hasOpenAiKey()) {
     if (typeof ANTHROPIC_KEY === 'string' && ANTHROPIC_KEY.length > 0) {
-      return analyzeDiffComponentsAnthropic(changes, before, after, pathContext, identityHints);
+      return analyzeDiffComponentsAnthropic(changes, before, after, ctx);
     }
-    return mergeAnalyses(changes, buildLocalComponentAnalysis(changes), identityHints);
+    return mergeAnalyses(changes, buildLocalComponentAnalysis(changes), ctx.identityHints);
   }
 
   try {
@@ -260,13 +271,7 @@ export async function analyzeDiffComponents(
       dangerouslyAllowBrowser: true,
     });
 
-    const content = await buildVisionContent(
-      changes,
-      before,
-      after,
-      pathContext,
-      identityHints,
-    );
+    const content = await buildVisionContent(changes, before, after, ctx);
 
     const msg = await client.chat.completions.create({
       model: 'gpt-4o',
@@ -278,22 +283,22 @@ export async function analyzeDiffComponents(
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]) as ComponentAnalysis[];
-      return mergeAnalyses(changes, parsed, identityHints);
+      return mergeAnalyses(changes, parsed, ctx.identityHints);
     }
   } catch (err) {
     console.warn('OpenAI component analysis failed, falling back:', err);
   }
 
-  return mergeAnalyses(changes, buildLocalComponentAnalysis(changes), identityHints);
+  return mergeAnalyses(changes, buildLocalComponentAnalysis(changes), ctx.identityHints);
 }
 
 async function analyzeDiffComponentsAnthropic(
   changes: DiffChange[],
   before: Checkpoint,
   after: Checkpoint,
-  pathContext?: string,
-  identityHints?: Map<string, IdentityHint>,
+  ctx: DiffAnalysisContext,
 ): Promise<ComponentAnalysis[]> {
+  const { pathContext, identityHints, checkpoints } = ctx;
   try {
     const client = new Anthropic({
       apiKey: ANTHROPIC_KEY,
@@ -330,12 +335,17 @@ async function analyzeDiffComponentsAnthropic(
         `Before${beforeNote} — ${relativeTime(before.createdAt)}`,
         `After${afterNote} — ${relativeTime(after.createdAt)}`,
         pathContext ?? '',
-        identityHints && identityHints.size > 0
-          ? formatIdentityHintsForPrompt(changes, identityHints)
+        checkpoints && checkpoints.length > 0
+          ? formatPathNotesForPrompt(checkpoints, before, after)
           : '',
+        identityHints && identityHints.size > 0
+          ? formatIdentityHintsForPrompt(changes, identityHints, Boolean(after.note?.trim()))
+          : '',
+        buildSceneContextPrompt(after) ?? '',
         'Final changes:',
         changeLines.join('\n'),
-        'No generic labels (object, shape, random object). Use body-part names when strokes look like limbs or faces.',
+        'Use identity hints and save notes when provided. Label changes as parts of the AFTER drawing.',
+        'Avoid generic placeholders (object, shape, blob, random).',
       ].join('\n'),
     });
 
@@ -359,7 +369,7 @@ async function analyzeDiffComponentsAnthropic(
   } catch (err) {
     console.warn('Anthropic component analysis failed:', err);
   }
-  return mergeAnalyses(changes, buildLocalComponentAnalysis(changes), identityHints);
+  return mergeAnalyses(changes, buildLocalComponentAnalysis(changes), ctx.identityHints);
 }
 
 export async function generateDiffSummary(

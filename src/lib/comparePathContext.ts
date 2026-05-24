@@ -86,12 +86,12 @@ export function buildComparePathContext(
     '',
     stepLines.join('\n\n'),
     '',
-    'Objects touched along the journey (reuse these identities in your labels):',
+    'Objects touched along the journey (context only — match each final change to the step where that region actually changed):',
     threadSummary.length > 0
       ? threadSummary.map((t) => `- ${t}`).join('\n')
       : '- no component-level edits between consecutive saves',
     '',
-    'The FINAL images below are the endpoints only. Describe each listed change as part of this journey —',
-    'do not invent unrelated objects; map labels to what evolved across the steps above.',
+    'The FINAL images below are the endpoints only.',
+    'If the "after" checkpoint has no save note, label from the AFTER image — do not copy titles from older noted saves onto unrelated regions.',
   ].join('\n');
 }

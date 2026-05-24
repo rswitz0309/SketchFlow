@@ -152,6 +152,7 @@ export default function CompareView({ left, right, checkpoints }: CompareViewPro
     void analyzeDiffComponents(changes, left, right, {
       pathContext,
       identityHints,
+      checkpoints,
     }).then((comps) => {
       if (cancelled) return;
       setAnalyses(comps);
