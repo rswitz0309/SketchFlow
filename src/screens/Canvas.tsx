@@ -215,6 +215,7 @@ export default function Canvas({ projectId, onBack, onOpenTimeline }: CanvasProp
         color={color}
         size={size}
         onStrokeComplete={handleStrokeComplete}
+        onMoveStroke={history.moveStroke}
       />
     </div>
   );

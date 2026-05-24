@@ -3,7 +3,7 @@ import { strokesToInnerSvg } from './serializeSvg';
 import { parseStrokesFromSvg } from './serializeSvg';
 import { diffSvgComponents, diffSvgComponentsAsync } from './diffComponents';
 
-export type ChangeKind = 'add' | 'rem' | 'mov' | 'sty';
+export type ChangeKind = 'add' | 'rem' | 'mov';
 
 export interface Bounds {
   x: number;
@@ -26,9 +26,9 @@ export interface DiffChange {
   aiDescription?: string;
   strokeCount?: number;
   beforeStrokeCount?: number;
-  /** Strokes in the after-state component (add/mov/sty). */
+  /** Strokes in the after-state component (add/mov). */
   memberStrokes?: Stroke[];
-  /** Strokes in the before-state component (rem/mov/sty). */
+  /** Strokes in the before-state component (rem/mov). */
   beforeMemberStrokes?: Stroke[];
 }
 

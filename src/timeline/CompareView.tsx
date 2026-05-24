@@ -28,7 +28,6 @@ const LEGEND_ITEMS: { k: ChangeKind; label: string }[] = [
   { k: 'add', label: 'added' },
   { k: 'rem', label: 'removed' },
   { k: 'mov', label: 'moved' },
-  { k: 'sty', label: 'restyled' },
 ];
 
 function checkpointLabel(cp: Checkpoint): string {
@@ -53,7 +52,6 @@ export default function CompareView({ left, right, checkpoints }: CompareViewPro
     add: true,
     rem: true,
     mov: true,
-    sty: true,
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);

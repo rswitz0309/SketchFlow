@@ -11,8 +11,6 @@ function kindWord(kind: ChangeKind): string {
       return 'removed';
     case 'mov':
       return 'moved';
-    case 'sty':
-      return 'restyled';
   }
 }
 

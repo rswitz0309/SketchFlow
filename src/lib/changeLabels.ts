@@ -8,8 +8,6 @@ function kindWord(kind: ChangeKind): string {
       return 'Removed';
     case 'mov':
       return 'Moved';
-    case 'sty':
-      return 'Restyled';
   }
 }
 

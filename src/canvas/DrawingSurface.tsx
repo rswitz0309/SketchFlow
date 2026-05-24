@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Stroke, Tool } from '../types';
 import { CANVAS_BG, CANVAS_H, CANVAS_W } from '../types';
+import { findStrokeAtPoint, translateStroke } from '../lib/strokeHitTest';
 import { pointsToSmoothPath } from '../lib/serializeSvg';
 import './DrawingSurface.css';
 
@@ -10,42 +11,84 @@ export interface DrawingSurfaceProps {
   color: string;
   size: number;
   onStrokeComplete: (stroke: Stroke) => void;
+  onMoveStroke: (index: number, dx: number, dy: number) => void;
 }
 
 interface StrokeRenderProps {
   stroke: Stroke;
+  highlighted?: boolean;
+  dimmed?: boolean;
 }
 
-function StrokePath({ stroke }: StrokeRenderProps) {
+function StrokePath({ stroke, highlighted, dimmed }: StrokeRenderProps) {
   const color = stroke.tool === 'eraser' ? CANVAS_BG : stroke.color;
   const width = stroke.tool === 'brush' ? stroke.size * 1.15 : stroke.size;
-  const opacity = stroke.tool === 'brush' ? 0.85 : 1;
+  const opacity = dimmed ? 0.35 : stroke.tool === 'brush' ? 0.85 : 1;
 
   if (stroke.points.length === 0) return null;
+
   if (stroke.points.length === 1) {
     const [x, y] = stroke.points[0];
     const r = Math.max(stroke.size / 2, 0.5);
-    return <circle cx={x} cy={y} r={r} fill={color} opacity={opacity} />;
+    return (
+      <>
+        {highlighted && (
+          <circle cx={x} cy={y} r={r + 6} fill="rgba(37, 99, 235, 0.12)" stroke="#2563eb" strokeWidth={1.5} />
+        )}
+        <circle cx={x} cy={y} r={r} fill={color} opacity={opacity} />
+      </>
+    );
   }
+
   const d = pointsToSmoothPath(stroke.points);
   return (
-    <path
-      d={d}
-      fill="none"
-      stroke={color}
-      strokeWidth={width}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      opacity={opacity}
-    />
+    <>
+      {highlighted && (
+        <path
+          d={d}
+          fill="none"
+          stroke="#2563eb"
+          strokeWidth={width + 10}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity={0.25}
+        />
+      )}
+      <path
+        d={d}
+        fill="none"
+        stroke={color}
+        strokeWidth={width}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity={opacity}
+      />
+    </>
   );
 }
 
 export default function DrawingSurface(props: DrawingSurfaceProps) {
-  const { strokes, tool, color, size, onStrokeComplete } = props;
+  const { strokes, tool, color, size, onStrokeComplete, onMoveStroke } = props;
   const svgRef = useRef<SVGSVGElement>(null);
   const pointsRef = useRef<[number, number][] | null>(null);
+  const dragRef = useRef<{
+    index: number;
+    start: [number, number];
+    offset: [number, number];
+  } | null>(null);
   const [renderTick, setRenderTick] = useState(0);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  function bumpRender() {
+    setRenderTick((t) => t + 1);
+  }
+
+  useEffect(() => {
+    if (tool !== 'select') {
+      setHoveredIndex(null);
+      dragRef.current = null;
+    }
+  }, [tool]);
 
   function toLocal(e: React.PointerEvent<SVGSVGElement>): [number, number] | null {
     const svg = svgRef.current;
@@ -60,19 +103,19 @@ export default function DrawingSurface(props: DrawingSurfaceProps) {
     return [loc.x, loc.y];
   }
 
-  function handlePointerDown(e: React.PointerEvent<SVGSVGElement>) {
+  function handleDrawPointerDown(e: React.PointerEvent<SVGSVGElement>) {
     const loc = toLocal(e);
     if (!loc) return;
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
-      /* setPointerCapture can throw for synthetic/mock pointers; ignore */
+      /* ignore */
     }
     pointsRef.current = [loc];
-    setRenderTick((t) => t + 1);
+    bumpRender();
   }
 
-  function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
+  function handleDrawPointerMove(e: React.PointerEvent<SVGSVGElement>) {
     if (!pointsRef.current) return;
     const loc = toLocal(e);
     if (!loc) return;
@@ -81,27 +124,98 @@ export default function DrawingSurface(props: DrawingSurfaceProps) {
     const dy = loc[1] - last[1];
     if (dx * dx + dy * dy < 2.25) return;
     pointsRef.current.push(loc);
-    setRenderTick((t) => t + 1);
+    bumpRender();
   }
 
   function finishStroke() {
     const pts = pointsRef.current;
     pointsRef.current = null;
     if (!pts || pts.length === 0) {
-      setRenderTick((t) => t + 1);
+      bumpRender();
       return;
     }
-    const stroke: Stroke = {
-      tool,
-      color,
-      size,
-      points: pts,
-    };
-    onStrokeComplete(stroke);
-    setRenderTick((t) => t + 1);
+    onStrokeComplete({ tool, color, size, points: pts });
+    bumpRender();
+  }
+
+  function handleSelectPointerDown(e: React.PointerEvent<SVGSVGElement>) {
+    const loc = toLocal(e);
+    if (!loc) return;
+    const index = findStrokeAtPoint(strokes, loc);
+    if (index === null) {
+      setHoveredIndex(null);
+      return;
+    }
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    dragRef.current = { index, start: loc, offset: [0, 0] };
+    setHoveredIndex(index);
+    bumpRender();
+  }
+
+  function handleSelectPointerMove(e: React.PointerEvent<SVGSVGElement>) {
+    const loc = toLocal(e);
+    if (!loc) return;
+
+    if (dragRef.current) {
+      dragRef.current = {
+        ...dragRef.current,
+        offset: [
+          loc[0] - dragRef.current.start[0],
+          loc[1] - dragRef.current.start[1],
+        ],
+      };
+      bumpRender();
+      return;
+    }
+
+    setHoveredIndex(findStrokeAtPoint(strokes, loc));
+  }
+
+  function finishSelect(e: React.PointerEvent<SVGSVGElement>) {
+    try {
+      if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const drag = dragRef.current;
+    dragRef.current = null;
+    if (drag) {
+      const [dx, dy] = drag.offset;
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+        onMoveStroke(drag.index, dx, dy);
+      }
+      bumpRender();
+    }
+  }
+
+  function handlePointerDown(e: React.PointerEvent<SVGSVGElement>) {
+    if (tool === 'select') {
+      handleSelectPointerDown(e);
+      return;
+    }
+    handleDrawPointerDown(e);
+  }
+
+  function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
+    if (tool === 'select') {
+      handleSelectPointerMove(e);
+      return;
+    }
+    handleDrawPointerMove(e);
   }
 
   function handlePointerUp(e: React.PointerEvent<SVGSVGElement>) {
+    if (tool === 'select') {
+      finishSelect(e);
+      return;
+    }
     try {
       if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
         e.currentTarget.releasePointerCapture(e.pointerId);
@@ -113,19 +227,44 @@ export default function DrawingSurface(props: DrawingSurfaceProps) {
   }
 
   function handlePointerLeave() {
+    if (tool === 'select') {
+      if (!dragRef.current) setHoveredIndex(null);
+      return;
+    }
     if (pointsRef.current) finishStroke();
   }
 
-  const inProgressStroke: Stroke | null = pointsRef.current
-    ? { tool, color, size, points: pointsRef.current }
-    : null;
+  const drag = dragRef.current;
+  const dragOffset = drag?.offset ?? [0, 0];
+  const activeIndex = drag?.index ?? hoveredIndex;
+  const isDragging = drag !== null;
+
+  const displayStrokes = isDragging
+    ? strokes.map((stroke, i) =>
+        i === drag.index ? translateStroke(stroke, dragOffset[0], dragOffset[1]) : stroke,
+      )
+    : strokes;
+
+  const inProgressStroke: Stroke | null =
+    tool !== 'select' && pointsRef.current
+      ? { tool, color, size, points: pointsRef.current }
+      : null;
+
+  const cursorClass =
+    tool === 'select'
+      ? isDragging
+        ? 'sf-drawing-surface__svg--grabbing'
+        : hoveredIndex !== null
+          ? 'sf-drawing-surface__svg--grab'
+          : 'sf-drawing-surface__svg--default'
+      : '';
 
   return (
     <div className="sf-drawing-surface">
       <div className="sf-drawing-surface__frame">
         <svg
           ref={svgRef}
-          className="sf-drawing-surface__svg"
+          className={`sf-drawing-surface__svg ${cursorClass}`}
           viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
           preserveAspectRatio="xMidYMid meet"
           onPointerDown={handlePointerDown}
@@ -135,8 +274,13 @@ export default function DrawingSurface(props: DrawingSurfaceProps) {
           data-render-tick={renderTick}
         >
           <rect width={CANVAS_W} height={CANVAS_H} fill={CANVAS_BG} />
-          {strokes.map((s, i) => (
-            <StrokePath key={i} stroke={s} />
+          {displayStrokes.map((s, i) => (
+            <StrokePath
+              key={i}
+              stroke={s}
+              highlighted={tool === 'select' && i === activeIndex}
+              dimmed={tool === 'select' && activeIndex !== null && i !== activeIndex}
+            />
           ))}
           {inProgressStroke && <StrokePath stroke={inProgressStroke} />}
         </svg>

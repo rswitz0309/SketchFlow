@@ -1,4 +1,4 @@
-export type Tool = 'pencil' | 'brush' | 'eraser';
+export type Tool = 'pencil' | 'brush' | 'eraser' | 'select';
 
 export interface Stroke {
   tool: Tool;

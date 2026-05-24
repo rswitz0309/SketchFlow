@@ -2,6 +2,7 @@ import type { Stroke } from '../types';
 import type { Bounds, DiffChange, DiffResult } from './diffStrokes';
 import { changeColorAt } from './diffComponents';
 import { detectChangedPixelRegions, overlapsPixelRegions } from './pixelDiff';
+import { estimateRigidMove, pairUnchangedStrokes } from './strokeMatching';
 
 function strokeBounds(s: Stroke, pad = 8): Bounds {
   if (s.points.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
@@ -108,17 +109,25 @@ function refineWithPixelRegions(result: DiffResult, regions: Bounds[]): DiffResu
     const afterHits = strokesInRegion(result.afterStrokes, region);
     if (beforeHits.length === 0 && afterHits.length === 0) continue;
 
-    let kind: DiffChange['kind'];
+    let kind: DiffChange['kind'] | null;
     if (beforeHits.length === 0) kind = 'add';
     else if (afterHits.length === 0) kind = 'rem';
-    else kind = 'sty';
+    else {
+      const unchanged = pairUnchangedStrokes(beforeHits, afterHits);
+      if (unchanged.count >= Math.min(beforeHits.length, afterHits.length)) {
+        continue;
+      }
+      const move = estimateRigidMove(beforeHits, afterHits);
+      kind = move.isMove ? 'mov' : null;
+    }
+    if (!kind) continue;
 
     const { stroke: color, fill: colorFill } = changeColorAt(colorIndex++);
     const regionName = regionLabel(region);
     changes.push({
       id: `px-${kind}-${colorIndex}`,
       kind,
-      summary: `${kind === 'add' ? 'added' : kind === 'rem' ? 'removed' : 'changed'} object · ${regionName}`,
+      summary: `${kind === 'add' ? 'added' : kind === 'rem' ? 'removed' : 'moved'} object · ${regionName}`,
       detail: 'Detected via canvas vision',
       bounds: region,
       beforeBounds: kind !== 'add' ? region : undefined,
