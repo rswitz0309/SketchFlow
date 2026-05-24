@@ -220,7 +220,9 @@ async function buildVisionContent(
       'If something still appears in the AFTER image (even moved or redrawn), do not describe it as removed.',
       'Avoid generic labels: object, shape, element, blob, mark, random.',
       'When identity hints or save notes are provided, treat them as authoritative.',
-      'For distant comparisons, the path context describes how the drawing evolved — labels must stay consistent with that history.',
+      'Each line includes pre-detected summary and detail — your description must describe that SAME net change (same kind: add/rem/mov).',
+      'Do not describe intermediate saves or unrelated regions. Do not contradict the summary/detail on that line.',
+      'For distant comparisons, path context is for naming consistency only — describe what changed between the two endpoint images.',
       'Use the exact id string from each line in your JSON response.',
       '',
       `Before${beforeNote} — ${relativeTime(before.createdAt)}`,
@@ -302,7 +304,7 @@ async function analyzeDiffComponentsAnthropic(
     });
 
     const changeLines = changes.map((c, i) => {
-      return `${i + 1}. id=${c.id} | ${kindWord(c.kind)} | region=${c.componentLabel} | ${c.detail}`;
+      return `${i + 1}. id=${c.id} | ${kindWord(c.kind)} | region=${c.componentLabel} | ${c.summary} | ${c.detail}`;
     });
 
     const content: Anthropic.MessageCreateParams['messages'][0]['content'] = [];
@@ -341,6 +343,8 @@ async function analyzeDiffComponentsAnthropic(
         'Final changes:',
         changeLines.join('\n'),
         'Use identity hints and save notes when provided. Label changes as parts of the AFTER drawing.',
+        'Each line includes pre-detected summary and detail — description must match that net change.',
+        'Do not narrate intermediate saves; path context is for naming only.',
         'Avoid generic placeholders (object, shape, blob, random).',
       ].join('\n'),
     });

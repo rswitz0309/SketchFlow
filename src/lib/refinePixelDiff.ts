@@ -1,8 +1,13 @@
 import type { Stroke } from '../types';
 import type { Bounds, DiffChange, DiffResult } from './diffStrokes';
 import { changeColorAt } from './diffComponents';
+import { reconcileOpposingAddRem } from './diffPathReconcile';
 import { detectChangedPixelRegions, overlapsPixelRegions } from './pixelDiff';
-import { estimateRigidMove, pairUnchangedStrokes } from './strokeMatching';
+import {
+  estimateRigidMove,
+  pairUnchangedStrokes,
+  strokeGroupsShareRelocatedObject,
+} from './strokeMatching';
 
 function strokeBounds(s: Stroke, pad = 8): Bounds {
   if (s.points.length === 0) return { x: 0, y: 0, w: 0, h: 0 };
@@ -117,8 +122,12 @@ function refineWithPixelRegions(result: DiffResult, regions: Bounds[]): DiffResu
       if (unchanged.count >= Math.min(beforeHits.length, afterHits.length)) {
         continue;
       }
-      const move = estimateRigidMove(beforeHits, afterHits);
-      kind = move.isMove ? 'mov' : null;
+      const move = estimateRigidMove(beforeHits, afterHits, 10, 30);
+      const shared = strokeGroupsShareRelocatedObject(beforeHits, afterHits);
+      kind =
+        move.isMove || (shared && shared.displacement >= 16)
+          ? 'mov'
+          : null;
     }
     if (!kind) continue;
 
@@ -141,5 +150,5 @@ function refineWithPixelRegions(result: DiffResult, regions: Bounds[]): DiffResu
     });
   }
 
-  return { ...result, changes };
+  return reconcileOpposingAddRem({ ...result, changes });
 }

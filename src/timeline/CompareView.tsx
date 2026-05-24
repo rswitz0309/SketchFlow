@@ -9,8 +9,12 @@ import {
   type DiffChange,
   type DiffResult,
 } from '../lib/diffStrokes';
-import { analyzeDiffComponents, type ComponentAnalysis } from '../lib/ai';
-import { buildComparePathContext } from '../lib/comparePathContext';
+import type { ComponentAnalysis } from '../lib/ai';
+import {
+  aiDescriptionAddsValue,
+  detectionDetailLine,
+} from '../lib/detailConsistency';
+import { analyzeDiffComponentsConsistent } from '../lib/diffLabels';
 import { buildIdentityHints } from '../lib/objectTracking';
 import { parseStrokesFromSvg } from '../lib/serializeSvg';
 import DiffOverlay from './DiffOverlay';
@@ -157,12 +161,15 @@ export default function CompareView({ left, right, checkpoints }: CompareViewPro
     if (diffLoading || !result) return;
 
     const changes = result.changes;
-    const pathContext = buildComparePathContext(checkpoints, left, right);
     const identityHints = buildIdentityHints(checkpoints, left, right, changes);
-    void analyzeDiffComponents(changes, left, right, {
-      pathContext,
-      identityHints,
+    const projectId = left.projectId;
+    void analyzeDiffComponentsConsistent({
+      projectId,
+      changes,
+      before: left,
+      after: right,
       checkpoints,
+      ctx: { identityHints, checkpoints },
     }).then((comps) => {
       if (cancelled) return;
       setAnalyses(comps);
@@ -324,8 +331,9 @@ export default function CompareView({ left, right, checkpoints }: CompareViewPro
                       <span className="sf-diff__change-body">
                         <span className="sf-diff__change-title mono">{title}</span>
                         <span className="sf-diff__change-detail">
-                          {c.summary}
-                          {analysis?.description ? (
+                          {detectionDetailLine(c)}
+                          {analysis?.description &&
+                          aiDescriptionAddsValue(analysis.description, c) ? (
                             <> · {analysis.description}</>
                           ) : analysisLoading ? (
                             <> · analyzing…</>

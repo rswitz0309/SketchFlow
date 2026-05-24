@@ -14,6 +14,7 @@ import {
   clusterStrokesRelocatedToAfter,
   clusterUnchangedInBefore,
   clusterWasRelocated,
+  clustersAreSameObject,
   colorsSimilar,
   estimateRigidMove,
   extendUnchangedWithMicroMoves,
@@ -426,7 +427,76 @@ function detectChangeKind(
     return { kind: 'mov', move };
   }
 
+  if (clustersAreSameObject(beforeMemberStrokes, afterMemberStrokes)) {
+    const relaxed = estimateRigidMove(
+      beforeMemberStrokes,
+      afterMemberStrokes,
+      10,
+      RELOCATED_SHAPE_THRESHOLD,
+    );
+    if (
+      relaxed.displacement >= MICRO_MOVE_THRESHOLD &&
+      relaxed.confidence >= 0.26
+    ) {
+      return { kind: 'mov', move: relaxed };
+    }
+  }
+
   return { kind: null, move };
+}
+
+/** Pair unmatched clusters that are the same object shifted on the canvas. */
+function pairUnmatchedClustersAsMoves(
+  before: Stroke[],
+  after: Stroke[],
+  beforeClusters: Cluster[],
+  afterClusters: Cluster[],
+  matchedBefore: Set<number>,
+  matchedAfter: Set<number>,
+): { bi: number; ai: number }[] {
+  const out: { bi: number; ai: number }[] = [];
+  const usedAfter = new Set(matchedAfter);
+
+  for (let bi = 0; bi < beforeClusters.length; bi++) {
+    if (matchedBefore.has(bi)) continue;
+    const bc = beforeClusters[bi];
+    const beforeMemberStrokes = bc.strokeIndices.map((i) => before[i]);
+    let bestAi = -1;
+    let bestScore = Infinity;
+
+    for (let ai = 0; ai < afterClusters.length; ai++) {
+      if (usedAfter.has(ai)) continue;
+      const ac = afterClusters[ai];
+      const afterMemberStrokes = ac.strokeIndices.map((i) => after[i]);
+      if (!clustersAreSameObject(beforeMemberStrokes, afterMemberStrokes)) continue;
+
+      const move = estimateRigidMove(
+        beforeMemberStrokes,
+        afterMemberStrokes,
+        10,
+        RELOCATED_SHAPE_THRESHOLD,
+      );
+      if (move.confidence < 0.24 && move.displacement < MICRO_MOVE_THRESHOLD) {
+        continue;
+      }
+      const score = clusterMatchScore(before, after, bc, ac);
+      if (score < bestScore) {
+        bestScore = score;
+        bestAi = ai;
+      }
+    }
+
+    if (bestAi >= 0) {
+      out.push({ bi, ai: bestAi });
+      matchedBefore.add(bi);
+      usedAfter.add(bestAi);
+    }
+  }
+
+  for (const p of out) {
+    matchedAfter.add(p.ai);
+  }
+  return out;
 }
 
 export function diffComponents(
@@ -492,7 +562,7 @@ export function diffComponents(
     });
   }
 
-  for (const { bi, ai } of finalPairs) {
+  function pushMatchedClusterChange(bi: number, ai: number, idPrefix: string) {
     const bc = beforeClusters[bi];
     const ac = afterClusters[ai];
     const beforeMemberStrokes = bc.strokeIndices.map((i) => before[i]);
@@ -502,12 +572,12 @@ export function diffComponents(
     const n = afterMemberStrokes.length;
 
     if (!kind || move.displacement < MICRO_MOVE_THRESHOLD) {
-      unchangedCount++;
-      continue;
+      unchangedCount += beforeMemberStrokes.filter((s) => s.tool !== 'eraser').length;
+      return;
     }
 
     pushChange({
-      id: `comp-${kind}-${bi}-${ai}`,
+      id: `${idPrefix}-${kind}-${bi}-${ai}`,
       kind,
       summary: buildComponentSummary(kind, region, n),
       detail: buildComponentDetail(
@@ -527,6 +597,22 @@ export function diffComponents(
       memberStrokes: afterMemberStrokes,
       beforeMemberStrokes,
     });
+  }
+
+  for (const { bi, ai } of finalPairs) {
+    pushMatchedClusterChange(bi, ai, 'comp');
+  }
+
+  const relocatedPairs = pairUnmatchedClustersAsMoves(
+    before,
+    after,
+    beforeClusters,
+    afterClusters,
+    matchedBefore,
+    matchedAfter,
+  );
+  for (const { bi, ai } of relocatedPairs) {
+    pushMatchedClusterChange(bi, ai, 'comp-reloc');
   }
 
   for (let bi = 0; bi < beforeClusters.length; bi++) {
