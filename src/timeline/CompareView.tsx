@@ -195,8 +195,18 @@ export default function CompareView({ left, right, checkpoints }: CompareViewPro
     setSelectedId((prev) => (prev === c.id ? null : c.id));
   }
 
-  const selected = enrichedChanges.find((c) => c.id === selectedId);
   const focusId = hoveredId ?? selectedId;
+
+  function kindLabel(kind: ChangeKind): string {
+    switch (kind) {
+      case 'add':
+        return 'added';
+      case 'rem':
+        return 'removed';
+      case 'mov':
+        return 'moved';
+    }
+  }
 
   return (
     <div className="sf-diff">
@@ -312,72 +322,89 @@ export default function CompareView({ left, right, checkpoints }: CompareViewPro
                 visibleChanges.map((c) => {
                   const analysis = analysisById.get(c.id);
                   const title = analysis?.label ?? c.componentLabel;
+                  const isOpen = selectedId === c.id;
                   const isActive = focusId === c.id;
                   return (
-                    <button
+                    <div
                       key={c.id}
-                      type="button"
                       data-change-id={c.id}
-                      className={`sf-diff__change ${isActive ? 'is-active' : ''}`}
-                      style={{ borderLeftColor: isActive ? c.color : undefined }}
-                      onClick={() => selectChange(c)}
-                      onMouseEnter={() => setHoveredId(c.id)}
-                      onMouseLeave={() => setHoveredId(null)}
+                      className={`sf-diff__change-item ${isOpen ? 'is-open' : ''}`}
                     >
-                      <span
-                        className="sf-diff__change-dot"
-                        style={{ background: c.color }}
-                      />
-                      <span className="sf-diff__change-body">
-                        <span className="sf-diff__change-title mono">{title}</span>
-                        <span className="sf-diff__change-detail">
-                          {detectionDetailLine(c)}
-                          {analysis?.description &&
-                          aiDescriptionAddsValue(analysis.description, c) ? (
-                            <> · {analysis.description}</>
-                          ) : analysisLoading ? (
-                            <> · analyzing…</>
-                          ) : null}
+                      <button
+                        type="button"
+                        className={`sf-diff__change-header ${isActive ? 'is-active' : ''}`}
+                        style={{ borderLeftColor: isActive ? c.color : undefined }}
+                        aria-expanded={isOpen}
+                        aria-controls={`change-panel-${c.id}`}
+                        onClick={() => selectChange(c)}
+                        onMouseEnter={() => setHoveredId(c.id)}
+                        onMouseLeave={() => setHoveredId(null)}
+                      >
+                        <span
+                          className="sf-diff__change-dot"
+                          style={{ background: c.color }}
+                        />
+                        <span className="sf-diff__change-body">
+                          <span className="sf-diff__change-title-row">
+                            <span className="sf-diff__change-title mono">{title}</span>
+                            <span className={`sf-diff__change-kind sf-diff__change-kind--${c.kind}`}>
+                              {kindLabel(c.kind)}
+                            </span>
+                          </span>
+                          {!isOpen && (
+                            <span className="sf-diff__change-preview">
+                              {detectionDetailLine(c)}
+                            </span>
+                          )}
                         </span>
-                      </span>
-                    </button>
+                        <span className="sf-diff__change-chevron" aria-hidden>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                            <path
+                              d="M6 9l6 6 6-6"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </span>
+                      </button>
+                      {isOpen && (
+                        <div
+                          id={`change-panel-${c.id}`}
+                          className="sf-diff__change-panel"
+                          role="region"
+                          aria-label={`Details for ${title}`}
+                        >
+                          <div className="sf-diff__change-panel-inner">
+                            <p className="sf-diff__change-panel-detail">
+                              {detectionDetailLine(c)}
+                            </p>
+                            {analysis?.description &&
+                            aiDescriptionAddsValue(analysis.description, c) ? (
+                              <p className="sf-diff__change-panel-ai">{analysis.description}</p>
+                            ) : analysisLoading && !analysis ? (
+                              <p className="sf-diff__change-panel-ai sf-diff__change-panel-ai--loading">
+                                Analyzing…
+                              </p>
+                            ) : null}
+                            {analysis?.beforeDescription && (
+                              <p className="sf-diff__change-panel-meta">
+                                <span className="mono">Before</span> {analysis.beforeDescription}
+                              </p>
+                            )}
+                            {analysis?.afterDescription && (
+                              <p className="sf-diff__change-panel-meta">
+                                <span className="mono">After</span> {analysis.afterDescription}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   );
                 })
               )}
             </div>
-
-            {selected && (
-              <div className="sf-diff__inspector">
-                <div className="sf-diff__inspector-eyebrow mono">Inspector</div>
-                <div
-                  className="sf-diff__inspector-kind mono"
-                  style={{ color: selected.color }}
-                >
-                  {analysisById.get(selected.id)?.label ?? selected.componentLabel}
-                </div>
-                <div className="sf-diff__inspector-meta mono">{selected.kind}</div>
-                <div className="sf-diff__inspector-detail">{selected.detail}</div>
-                {(() => {
-                  const analysis = analysisById.get(selected.id);
-                  if (!analysis) return null;
-                  return (
-                    <div className="sf-diff__inspector-ai">
-                      <p>{analysis.description}</p>
-                      {analysis.beforeDescription && (
-                        <p className="sf-diff__inspector-before">
-                          <span className="mono">Before</span> {analysis.beforeDescription}
-                        </p>
-                      )}
-                      {analysis.afterDescription && (
-                        <p className="sf-diff__inspector-after">
-                          <span className="mono">After</span> {analysis.afterDescription}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
           </aside>
         </div>
       </div>
