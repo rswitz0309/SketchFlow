@@ -205,7 +205,10 @@ export default function FamilyGraph({
                     <g
                       key={node.id}
                       className={`sf-family__node ${active ? 'is-active' : ''}`}
-                      onPointerDown={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                      }}
                       onMouseEnter={() => setHoveredId(node.id)}
                       onMouseLeave={() => setHoveredId(null)}
                       onClick={(e) => {
