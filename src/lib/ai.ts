@@ -483,11 +483,14 @@ export async function generateProgressNotes(
       return `${i + 1}. (${when})${note}`;
     });
     const prompt = [
-      'You are writing a short, warm paragraph for an artist about how their drawing evolved across saved checkpoints.',
-      'Focus on the creative journey, not technical changes. Talk directly to the artist ("you"). Keep it to 3–4 sentences.',
-      'Do not use the word "version" or any software-version-control vocabulary. No bullet points. Just one paragraph.',
+      'Summarize how this drawing changed across saved checkpoints — studio notes for the artist, not a pep talk.',
+      'Tone: plain, direct, observational. Describe what shifted using their save notes when present.',
+      'Do not flatter, hype, or call the work amazing, beautiful, incredible, or similar.',
+      'No superlatives, no exclamation marks, no "journey" language. Skip empty praise if notes are thin.',
+      'You may use "you" once or twice; otherwise stay neutral. 3–4 sentences, one paragraph, no bullets.',
+      'Do not use the word "version" or version-control vocabulary.',
       '',
-      `Checkpoints in order, with the artist's own notes when present:`,
+      'Checkpoints in order (artist notes when present):',
       lines.join('\n'),
     ].join('\n');
 
@@ -537,19 +540,19 @@ function buildLocalProgressNotes(checkpoints: Checkpoint[]): string {
   const span = relativeTime(first.createdAt);
   const parts: string[] = [];
   parts.push(
-    `You've saved ${n} checkpoint${n === 1 ? '' : 's'} on this piece, the first one ${span}.`,
+    `This piece has ${n} saved checkpoint${n === 1 ? '' : 's'}; the first was ${span}.`,
   );
   if (noted.length > 0) {
     const quotes = noted
-      .slice(-2)
+      .slice(-3)
       .map((c) => `"${c.note!.trim()}"`)
-      .join(' and ');
-    parts.push(`Along the way you noted ${quotes}.`);
+      .join('; ');
+    parts.push(`Save notes mention: ${quotes}.`);
+  } else {
+    parts.push('Most saves have no written notes, so the timeline is visual only.');
   }
   if (n >= 2) {
-    parts.push(
-      `Your latest save lands ${relativeTime(last.createdAt)} — a good moment to step back and see how far it's come.`,
-    );
+    parts.push(`Latest save: ${relativeTime(last.createdAt)}.`);
   }
   return parts.join(' ');
 }

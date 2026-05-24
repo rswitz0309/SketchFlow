@@ -20,7 +20,9 @@ export default function ProjectCard({
 }: ProjectCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [menuPlacement, setMenuPlacement] = useState<'above' | 'below'>('above');
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -33,6 +35,18 @@ export default function ProjectCard({
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
   }, [menuOpen]);
+
+  function openMenu() {
+    const btn = menuBtnRef.current;
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      setMenuPlacement(spaceBelow < 140 && spaceAbove > spaceBelow ? 'above' : 'below');
+    }
+    setMenuOpen((o) => !o);
+    if (menuOpen) setConfirming(false);
+  }
 
   const countLabel =
     project.checkpointCount === 0
@@ -72,8 +86,13 @@ export default function ProjectCard({
             onClick={(e) => e.stopPropagation()}
           >
             <button
+              ref={menuBtnRef}
+              type="button"
               className="sf-pcard__menu-btn"
-              onClick={() => setMenuOpen((o) => !o)}
+              onClick={(e) => {
+                e.stopPropagation();
+                openMenu();
+              }}
               aria-label="Project actions"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
@@ -85,7 +104,10 @@ export default function ProjectCard({
               </svg>
             </button>
             {menuOpen && (
-              <div className="sf-pcard__menu-popover" role="menu">
+              <div
+                className={`sf-pcard__menu-popover sf-pcard__menu-popover--${menuPlacement}`}
+                role="menu"
+              >
                 <button
                   className="sf-pcard__menu-item"
                   onClick={() => {
