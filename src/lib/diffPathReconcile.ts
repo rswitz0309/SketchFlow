@@ -4,6 +4,9 @@ import type { DiffChange, DiffResult } from './diffStrokes';
 import { parseStrokesFromSvg } from './serializeSvg';
 import {
   MICRO_MOVE_THRESHOLD,
+  RELOCATED_SHAPE_THRESHOLD,
+  clustersAreSameObject,
+  estimateRigidMove,
   pairSameObjectStrokes,
   strokeCentroid,
   strokeGroupsArePairedMove,
@@ -156,13 +159,28 @@ function cancelOpposingAddRem(
       if (remStrokes.length === 0 || addStrokes.length === 0) continue;
 
       const noteBias = noteSuggestsRepositioning(notes?.afterNote ?? notes?.beforeNote);
+      const clusterRelocated = clustersAreSameObject(remStrokes, addStrokes)
+        ? estimateRigidMove(
+            remStrokes,
+            addStrokes,
+            10,
+            RELOCATED_SHAPE_THRESHOLD,
+          )
+        : null;
       const pairedMove =
         strokeGroupsArePairedMove(remStrokes, addStrokes) ??
-        strokeGroupsShareRelocatedObject(remStrokes, addStrokes);
+        strokeGroupsShareRelocatedObject(remStrokes, addStrokes) ??
+        (clusterRelocated && clusterRelocated.confidence >= 0.24
+          ? clusterRelocated
+          : null);
       if (!pairedMove) continue;
 
       const move = pairedMove;
-      if (!move.isMove && !noteBias) continue;
+      const meaningfulMove =
+        move.isMove ||
+        move.displacement >= MICRO_MOVE_THRESHOLD ||
+        noteBias;
+      if (!meaningfulMove) continue;
 
       const roundTrip =
         pathNetDisplacementNearZero(

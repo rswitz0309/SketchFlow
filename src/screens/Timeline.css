@@ -39,6 +39,18 @@
   white-space: nowrap;
 }
 
+.sf-timeline__variant-badge {
+  font-size: var(--size-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-radius: var(--r-full);
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+
 .sf-timeline__eyebrow {
   font-size: var(--size-12);
   color: var(--muted);
@@ -119,6 +131,12 @@
 }
 .sf-timeline__empty p { margin: 0; }
 .sf-timeline__empty-art { color: var(--muted); }
+
+.sf-timeline__strip-area {
+  flex-shrink: 0;
+  background: var(--surface-soft);
+  border-top: 1px solid var(--hairline);
+}
 
 .sf-timeline__compare-hint {
   color: var(--muted);

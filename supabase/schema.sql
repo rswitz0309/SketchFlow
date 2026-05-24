@@ -6,8 +6,13 @@ create table if not exists projects (
   id uuid primary key default uuid_generate_v4(),
   title text not null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  parent_project_id uuid references projects(id) on delete cascade,
+  root_project_id uuid references projects(id) on delete cascade,
+  forked_from_checkpoint_id uuid
 );
+create index if not exists projects_parent_idx on projects(parent_project_id);
+create index if not exists projects_root_idx on projects(root_project_id);
 
 create table if not exists checkpoints (
   id uuid primary key default uuid_generate_v4(),

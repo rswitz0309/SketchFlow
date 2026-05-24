@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
-import type { ProjectSummary } from '../types';
-import { createProject, deleteProject, listProjectSummaries } from '../lib/storage';
+import type { GalleryLayout } from '../lib/storage';
+import {
+  createProject,
+  deleteProject,
+  listGalleryLayout,
+} from '../lib/storage';
 import ProjectCard from '../gallery/ProjectCard';
+import ProjectFolder from '../gallery/ProjectFolder';
 import NewProjectButton from '../gallery/NewProjectButton';
 import './Gallery.css';
 
@@ -10,14 +15,14 @@ export interface GalleryProps {
 }
 
 export default function Gallery({ onOpenProject }: GalleryProps) {
-  const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
+  const [layout, setLayout] = useState<GalleryLayout | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
     try {
       setError(null);
-      const data = await listProjectSummaries();
-      setProjects(data);
+      const data = await listGalleryLayout();
+      setLayout(data);
     } catch (e: unknown) {
       console.error(e);
       setError(
@@ -37,8 +42,10 @@ export default function Gallery({ onOpenProject }: GalleryProps) {
 
   async function handleDelete(id: string) {
     await deleteProject(id);
-    setProjects((prev) => (prev ?? []).filter((p) => p.id !== id));
+    await load();
   }
+
+  const loading = layout === null && !error;
 
   return (
     <div className="sf-gallery">
@@ -63,19 +70,32 @@ export default function Gallery({ onOpenProject }: GalleryProps) {
 
       <div className="sf-gallery__grid">
         <NewProjectButton onCreate={handleCreate} />
-        {projects === null && !error
+        {loading
           ? Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="sf-gallery__skeleton" />
             ))
-          : (projects ?? []).map((p) => (
-              <ProjectCard
-                key={p.id}
-                project={p}
-                onOpen={() => onOpenProject(p.id, 'canvas')}
-                onOpenTimeline={() => onOpenProject(p.id, 'timeline')}
-                onDelete={() => void handleDelete(p.id)}
-              />
-            ))}
+          : (
+            <>
+              {(layout?.standalone ?? []).map((p) => (
+                <ProjectCard
+                  key={p.id}
+                  project={p}
+                  onOpen={() => onOpenProject(p.id, 'canvas')}
+                  onOpenTimeline={() => onOpenProject(p.id, 'timeline')}
+                  onDelete={() => void handleDelete(p.id)}
+                />
+              ))}
+              {(layout?.folders ?? []).map((folder) => (
+                <ProjectFolder
+                  key={folder.root.id}
+                  folder={folder}
+                  onOpen={(id) => onOpenProject(id, 'canvas')}
+                  onOpenTimeline={(id) => onOpenProject(id, 'timeline')}
+                  onDelete={(id) => void handleDelete(id)}
+                />
+              ))}
+            </>
+          )}
       </div>
     </div>
   );

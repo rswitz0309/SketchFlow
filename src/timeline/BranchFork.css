@@ -1,0 +1,61 @@
+.sf-branch-fork {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--s-1) 0 0 var(--s-2);
+  min-height: 72px;
+}
+
+.sf-branch-fork__arrow {
+  width: 40px;
+  height: 48px;
+  flex-shrink: 0;
+  color: var(--ink-3);
+  margin-left: var(--s-2);
+}
+
+.sf-branch-fork__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: calc(-1 * var(--s-2));
+  margin-left: var(--s-5);
+}
+
+.sf-branch-fork__btn {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-2) var(--s-1) var(--s-1);
+  border-radius: var(--r-2);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-soft);
+  text-align: left;
+  max-width: 180px;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.sf-branch-fork__btn:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.sf-branch-fork__thumb {
+  width: 44px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: var(--r-1);
+  border: 1px solid var(--hairline);
+  flex-shrink: 0;
+}
+.sf-branch-fork__thumb--empty {
+  display: block;
+  background: var(--bg);
+}
+
+.sf-branch-fork__label {
+  font-size: var(--size-12);
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
