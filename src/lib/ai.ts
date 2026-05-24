@@ -195,6 +195,7 @@ async function buildVisionContent(
       '',
       'Be specific about shape, size, color, and position. Name what it likely depicts.',
       'Only describe changes listed below — never invent strokes or objects that are not in the list.',
+      'If something still appears in the AFTER image (even moved or redrawn), do not describe it as removed.',
       'Use the exact id string from each line in your JSON response.',
       '',
       `Before${beforeNote} — ${relativeTime(before.createdAt)}`,

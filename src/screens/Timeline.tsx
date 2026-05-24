@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Checkpoint, Project } from '../types';
+import { normalizeCompareIds, orderedCompareCheckpoints } from '../lib/compareOrder';
 import { getProject, listCheckpoints } from '../lib/storage';
 import { parseStrokesFromSvg } from '../lib/serializeSvg';
 import { clearAutosave, saveAutosave } from '../canvas/useAutosave';
@@ -75,23 +76,21 @@ export default function Timeline({
 
   const selected = checkpoints[index] ?? null;
 
-  const compareLeft = useMemo(() => {
-    const id = compareIds[0];
-    return id ? checkpoints.find((c) => c.id === id) ?? null : null;
-  }, [compareIds, checkpoints]);
-  const compareRight = useMemo(() => {
-    const id = compareIds[1];
-    return id ? checkpoints.find((c) => c.id === id) ?? null : null;
-  }, [compareIds, checkpoints]);
+  const [compareBefore, compareAfter] = useMemo(
+    () => orderedCompareCheckpoints(checkpoints, compareIds),
+    [compareIds, checkpoints],
+  );
 
   function handleToggleCompare(id: string) {
     setCompareIds((prev) => {
       const [a, b] = prev;
-      if (a === id) return [b, null];
-      if (b === id) return [a, null];
-      if (!a) return [id, b];
-      if (!b) return [a, id];
-      return [b, id];
+      let next: [string | null, string | null];
+      if (a === id) next = [b, null];
+      else if (b === id) next = [a, null];
+      else if (!a) next = [id, b];
+      else if (!b) next = [a, id];
+      else next = [b, id];
+      return normalizeCompareIds(checkpoints, next);
     });
   }
 
@@ -211,8 +210,8 @@ export default function Timeline({
               </button>
             </div>
           )
-        ) : compareLeft && compareRight ? (
-          <CompareView left={compareLeft} right={compareRight} />
+        ) : compareBefore && compareAfter ? (
+          <CompareView left={compareBefore} right={compareAfter} />
         ) : (
           <div className="sf-timeline__compare-hint">
             Pick two checkpoints below to compare.
