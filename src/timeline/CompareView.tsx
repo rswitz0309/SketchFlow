@@ -66,7 +66,19 @@ export default function CompareView({ left, right, checkpoints }: CompareViewPro
     let cancelled = false;
     setDiffLoading(true);
     setResult(null);
-    void diffSvgAsync(left.svgData, right.svgData).then((r) => {
+    const fromIdx = checkpoints.findIndex((c) => c.id === left.id);
+    const toIdx = checkpoints.findIndex((c) => c.id === right.id);
+    const path =
+      fromIdx >= 0 && toIdx > fromIdx
+        ? {
+            checkpoints,
+            fromIdx,
+            toIdx,
+            beforeNote: left.note,
+            afterNote: right.note,
+          }
+        : undefined;
+    void diffSvgAsync(left.svgData, right.svgData, path).then((r) => {
       if (!cancelled) {
         setResult(r);
         setDiffLoading(false);
@@ -75,7 +87,7 @@ export default function CompareView({ left, right, checkpoints }: CompareViewPro
     return () => {
       cancelled = true;
     };
-  }, [left.svgData, right.svgData]);
+  }, [left.svgData, right.svgData, checkpoints, left.id, right.id]);
 
   const diffResult = result ?? {
     changes: [],

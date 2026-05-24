@@ -123,7 +123,7 @@ function localComponentDescription(c: DiffChange): string {
     case 'rem':
       return `You removed a drawn object from the ${region} area.`;
     case 'mov':
-      return `You repositioned an object in the ${region} region.`;
+      return `You repositioned part of the drawing (${c.detail}).`;
   }
 }
 

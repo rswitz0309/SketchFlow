@@ -6,13 +6,14 @@ const MAX_HISTORY = 200;
 
 type UndoAction =
   | { type: 'add'; stroke: Stroke }
-  | { type: 'move'; index: number; before: Stroke; after: Stroke }
+  | { type: 'move'; changes: { index: number; before: Stroke; after: Stroke }[] }
   | { type: 'clear'; strokes: Stroke[] };
 
 export interface DrawingHistory {
   strokes: Stroke[];
   addStroke: (s: Stroke) => void;
   moveStroke: (index: number, dx: number, dy: number) => void;
+  moveStrokes: (indices: number[], dx: number, dy: number) => void;
   undo: () => void;
   redo: () => void;
   canUndo: boolean;
@@ -45,22 +46,34 @@ export function useDrawingHistory(initial: Stroke[] = []): DrawingHistory {
     [bumpStack],
   );
 
-  const moveStroke = useCallback(
-    (index: number, dx: number, dy: number) => {
-      if (dx === 0 && dy === 0) return;
+  const moveStrokes = useCallback(
+    (indices: number[], dx: number, dy: number) => {
+      if (indices.length === 0 || (dx === 0 && dy === 0)) return;
       redoStack.current = [];
       bumpStack();
       setStrokes((prev) => {
-        if (index < 0 || index >= prev.length) return prev;
-        const before = prev[index];
-        const after = translateStroke(before, dx, dy);
-        undoStack.current.push({ type: 'move', index, before, after });
-        const next = prev.slice();
-        next[index] = after;
+        const indexSet = new Set(indices);
+        const changes: { index: number; before: Stroke; after: Stroke }[] = [];
+        const next = prev.map((stroke, index) => {
+          if (!indexSet.has(index)) return stroke;
+          const after = translateStroke(stroke, dx, dy);
+          changes.push({ index, before: stroke, after });
+          return after;
+        });
+        if (changes.length > 0) {
+          undoStack.current.push({ type: 'move', changes });
+        }
         return next;
       });
     },
     [bumpStack],
+  );
+
+  const moveStroke = useCallback(
+    (index: number, dx: number, dy: number) => {
+      moveStrokes([index], dx, dy);
+    },
+    [moveStrokes],
   );
 
   const undo = useCallback(() => {
@@ -72,7 +85,9 @@ export function useDrawingHistory(initial: Stroke[] = []): DrawingHistory {
       if (action.type === 'add') return prev.slice(0, -1);
       if (action.type === 'clear') return action.strokes;
       const next = prev.slice();
-      next[action.index] = action.before;
+      for (const { index, before } of action.changes) {
+        next[index] = before;
+      }
       return next;
     });
   }, [bumpStack]);
@@ -86,7 +101,9 @@ export function useDrawingHistory(initial: Stroke[] = []): DrawingHistory {
       if (action.type === 'add') return prev.concat(action.stroke);
       if (action.type === 'clear') return [];
       const next = prev.slice();
-      next[action.index] = action.after;
+      for (const { index, after } of action.changes) {
+        next[index] = after;
+      }
       return next;
     });
   }, [bumpStack]);
@@ -116,6 +133,7 @@ export function useDrawingHistory(initial: Stroke[] = []): DrawingHistory {
     strokes,
     addStroke,
     moveStroke,
+    moveStrokes,
     undo,
     redo,
     canUndo: stackTick >= 0 && undoStack.current.length > 0,

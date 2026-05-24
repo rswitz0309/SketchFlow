@@ -11,7 +11,7 @@ export interface DrawingSurfaceProps {
   color: string;
   size: number;
   onStrokeComplete: (stroke: Stroke) => void;
-  onMoveStroke: (index: number, dx: number, dy: number) => void;
+  onMoveStrokes: (indices: number[], dx: number, dy: number) => void;
 }
 
 interface StrokeRenderProps {
@@ -67,17 +67,24 @@ function StrokePath({ stroke, highlighted, dimmed }: StrokeRenderProps) {
   );
 }
 
+function isMultiSelectKey(e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }): boolean {
+  return e.shiftKey || e.metaKey || e.ctrlKey;
+}
+
 export default function DrawingSurface(props: DrawingSurfaceProps) {
-  const { strokes, tool, color, size, onStrokeComplete, onMoveStroke } = props;
+  const { strokes, tool, color, size, onStrokeComplete, onMoveStrokes } = props;
   const svgRef = useRef<SVGSVGElement>(null);
   const pointsRef = useRef<[number, number][] | null>(null);
   const dragRef = useRef<{
-    index: number;
+    indices: number[];
     start: [number, number];
     offset: [number, number];
   } | null>(null);
   const [renderTick, setRenderTick] = useState(0);
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  const selectedSet = new Set(selectedIndices);
 
   function bumpRender() {
     setRenderTick((t) => t + 1);
@@ -85,6 +92,7 @@ export default function DrawingSurface(props: DrawingSurfaceProps) {
 
   useEffect(() => {
     if (tool !== 'select') {
+      setSelectedIndices([]);
       setHoveredIndex(null);
       dragRef.current = null;
     }
@@ -141,18 +149,39 @@ export default function DrawingSurface(props: DrawingSurfaceProps) {
   function handleSelectPointerDown(e: React.PointerEvent<SVGSVGElement>) {
     const loc = toLocal(e);
     if (!loc) return;
-    const index = findStrokeAtPoint(strokes, loc);
-    if (index === null) {
+    const hit = findStrokeAtPoint(strokes, loc);
+
+    if (hit === null) {
+      setSelectedIndices([]);
       setHoveredIndex(null);
       return;
     }
+
+    let nextSelection: number[];
+    if (isMultiSelectKey(e)) {
+      if (selectedSet.has(hit)) {
+        nextSelection = selectedIndices.filter((i) => i !== hit);
+      } else {
+        nextSelection = [...selectedIndices, hit];
+      }
+    } else if (selectedSet.has(hit)) {
+      nextSelection = selectedIndices;
+    } else {
+      nextSelection = [hit];
+    }
+
+    setSelectedIndices(nextSelection);
+    setHoveredIndex(hit);
+
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       /* ignore */
     }
-    dragRef.current = { index, start: loc, offset: [0, 0] };
-    setHoveredIndex(index);
+
+    if (nextSelection.length > 0) {
+      dragRef.current = { indices: nextSelection, start: loc, offset: [0, 0] };
+    }
     bumpRender();
   }
 
@@ -189,7 +218,7 @@ export default function DrawingSurface(props: DrawingSurfaceProps) {
     if (drag) {
       const [dx, dy] = drag.offset;
       if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-        onMoveStroke(drag.index, dx, dy);
+        onMoveStrokes(drag.indices, dx, dy);
       }
       bumpRender();
     }
@@ -236,12 +265,22 @@ export default function DrawingSurface(props: DrawingSurfaceProps) {
 
   const drag = dragRef.current;
   const dragOffset = drag?.offset ?? [0, 0];
-  const activeIndex = drag?.index ?? hoveredIndex;
+  const dragSet = new Set(drag?.indices ?? []);
   const isDragging = drag !== null;
+  const activeSet =
+    tool === 'select'
+      ? isDragging
+        ? dragSet
+        : selectedSet.size > 0
+          ? selectedSet
+          : hoveredIndex !== null
+            ? new Set([hoveredIndex])
+            : new Set<number>()
+      : new Set<number>();
 
   const displayStrokes = isDragging
     ? strokes.map((stroke, i) =>
-        i === drag.index ? translateStroke(stroke, dragOffset[0], dragOffset[1]) : stroke,
+        dragSet.has(i) ? translateStroke(stroke, dragOffset[0], dragOffset[1]) : stroke,
       )
     : strokes;
 
@@ -254,7 +293,7 @@ export default function DrawingSurface(props: DrawingSurfaceProps) {
     tool === 'select'
       ? isDragging
         ? 'sf-drawing-surface__svg--grabbing'
-        : hoveredIndex !== null
+        : activeSet.size > 0 || hoveredIndex !== null
           ? 'sf-drawing-surface__svg--grab'
           : 'sf-drawing-surface__svg--default'
       : '';
@@ -278,8 +317,8 @@ export default function DrawingSurface(props: DrawingSurfaceProps) {
             <StrokePath
               key={i}
               stroke={s}
-              highlighted={tool === 'select' && i === activeIndex}
-              dimmed={tool === 'select' && activeIndex !== null && i !== activeIndex}
+              highlighted={tool === 'select' && activeSet.has(i)}
+              dimmed={tool === 'select' && activeSet.size > 0 && !activeSet.has(i)}
             />
           ))}
           {inProgressStroke && <StrokePath stroke={inProgressStroke} />}

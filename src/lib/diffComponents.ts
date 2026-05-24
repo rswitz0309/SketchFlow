@@ -3,11 +3,24 @@ import { CANVAS_H, CANVAS_W } from '../types';
 import type { Bounds, ChangeKind, DiffChange, DiffResult } from './diffStrokes';
 import { parseStrokesFromSvg } from './serializeSvg';
 import {
+  reconcileDiffWithPath,
+  reconcileOpposingAddRem,
+  type DiffPathContext,
+  type ReconcileNotes,
+} from './diffPathReconcile';
+import { noteSuggestsRepositioning, moveIntentFromNote } from './checkpointNoteContext';
+import { inferMoveIntent, formatMoveIntentDetail } from './moveIntent';
+import {
+  clusterStrokesRelocatedToAfter,
   clusterUnchangedInBefore,
+  clusterWasRelocated,
   colorsSimilar,
   estimateRigidMove,
+  extendUnchangedWithMicroMoves,
   formatMoveDetail,
+  MICRO_MOVE_THRESHOLD,
   pairUnchangedStrokes,
+  RELOCATED_SHAPE_THRESHOLD,
   type RigidMoveEstimate,
 } from './strokeMatching';
 
@@ -21,6 +34,8 @@ const COMPONENT_MATCH_DIST = 110;
 const MIN_MATCH_IOU = 0.12;
 /** Looser match when reconciling would otherwise mark a still-visible stroke as removed. */
 const RELAXED_MATCH_DIST = 128;
+/** Match relocated objects even when centroids are far apart. */
+const RELOCATED_CLUSTER_MATCH_DIST = 220;
 /** Min overlap with any after stroke to treat a "removed" cluster as still present. */
 const PERSIST_IOU = 0.05;
 const PERSIST_CENTROID_DIST = 105;
@@ -218,7 +233,12 @@ function clusterMatchScore(
 ): number {
   const beforeMembers = before.strokeIndices.map((i) => beforeStrokes[i]);
   const afterMembers = after.strokeIndices.map((i) => afterStrokes[i]);
-  const rigid = estimateRigidMove(beforeMembers, afterMembers, MOVE_THRESHOLD);
+  const rigid = estimateRigidMove(
+    beforeMembers,
+    afterMembers,
+    MOVE_THRESHOLD,
+    RELOCATED_SHAPE_THRESHOLD,
+  );
 
   if (rigid.confidence >= 0.42) {
     return rigid.displacement * (1.1 - rigid.confidence * 0.35) - rigid.confidence * 52;
@@ -271,6 +291,8 @@ function buildComponentDetail(
   beforeBounds?: Bounds,
   afterBounds?: Bounds,
   moveEstimate?: RigidMoveEstimate,
+  allAfterStrokes?: Stroke[],
+  saveNote?: string | null,
 ): string {
   const color = dominantColor(strokes);
   if (kind === 'add') {
@@ -280,7 +302,24 @@ function buildComponentDetail(
     return `was ${dominantColor(beforeStrokes)} · ${beforeStrokes.length} stroke${beforeStrokes.length === 1 ? '' : 's'}`;
   }
   if (kind === 'mov' && beforeStrokes && moveEstimate) {
-    return formatMoveDetail(strokes, moveEstimate, dominantColor, beforeBounds, afterBounds);
+    const base = formatMoveDetail(
+      strokes,
+      moveEstimate,
+      dominantColor,
+      beforeBounds,
+      afterBounds,
+    );
+    const intent = moveIntentFromNote(
+      saveNote,
+      inferMoveIntent(
+        beforeBounds,
+        afterBounds ?? { x: 0, y: 0, w: 1, h: 1 },
+        beforeStrokes,
+        strokes,
+        allAfterStrokes ?? strokes,
+      ),
+    );
+    return formatMoveIntentDetail(base, intent);
   }
   return `${strokes.length} stroke${strokes.length === 1 ? '' : 's'}`;
 }
@@ -314,17 +353,38 @@ function findBestUnmatchedAfter(
   afterClusters: Cluster[],
   matchedAfter: Set<number>,
 ): { ai: number; score: number } | null {
+  const beforeMemberStrokes = bc.strokeIndices.map((i) => before[i]);
   let bestAi = -1;
   let bestScore = Infinity;
   for (let ai = 0; ai < afterClusters.length; ai++) {
     if (matchedAfter.has(ai)) continue;
-    const score = clusterMatchScore(before, after, bc, afterClusters[ai]);
+    const ac = afterClusters[ai];
+    const afterMemberStrokes = ac.strokeIndices.map((i) => after[i]);
+    const rigid = estimateRigidMove(
+      beforeMemberStrokes,
+      afterMemberStrokes,
+      MOVE_THRESHOLD,
+      RELOCATED_SHAPE_THRESHOLD,
+    );
+    if (rigid.confidence >= 0.35) {
+      const score = rigid.displacement;
+      if (score < bestScore) {
+        bestScore = score;
+        bestAi = ai;
+      }
+      continue;
+    }
+    const score = clusterMatchScore(before, after, bc, ac);
     if (score < bestScore) {
       bestScore = score;
       bestAi = ai;
     }
   }
-  if (bestAi < 0 || bestScore >= RELAXED_MATCH_DIST) return null;
+  const maxDist =
+    bestScore < COMPONENT_MATCH_DIST * 1.5
+      ? RELAXED_MATCH_DIST
+      : RELOCATED_CLUSTER_MATCH_DIST;
+  if (bestAi < 0 || bestScore >= maxDist) return null;
   return { ai: bestAi, score: bestScore };
 }
 
@@ -334,13 +394,21 @@ function detectChangeKind(
   bc: Cluster,
   ac: Cluster,
 ): { kind: ChangeKind | null; move: RigidMoveEstimate } {
-  const move = estimateRigidMove(beforeMemberStrokes, afterMemberStrokes, MOVE_THRESHOLD);
+  const move = estimateRigidMove(
+    beforeMemberStrokes,
+    afterMemberStrokes,
+    MOVE_THRESHOLD,
+    RELOCATED_SHAPE_THRESHOLD,
+  );
 
   if (move.isMove) {
     return { kind: 'mov', move };
   }
 
-  if (move.confidence >= 0.5 && move.displacement < MOVE_THRESHOLD) {
+  if (
+    move.confidence >= 0.5 &&
+    (move.displacement < MOVE_THRESHOLD || move.displacement < MICRO_MOVE_THRESHOLD)
+  ) {
     return { kind: null, move };
   }
 
@@ -361,8 +429,16 @@ function detectChangeKind(
   return { kind: null, move };
 }
 
-export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
-  const unchangedPairs = pairUnchangedStrokes(before, after);
+export function diffComponents(
+  before: Stroke[],
+  after: Stroke[],
+  notes?: ReconcileNotes,
+): DiffResult {
+  const unchangedPairs = extendUnchangedWithMicroMoves(
+    before,
+    after,
+    pairUnchangedStrokes(before, after),
+  );
 
   const beforeClusters = clusterStrokes(before, unchangedPairs.matchedBefore);
   const afterClusters = clusterStrokes(after, unchangedPairs.matchedAfter);
@@ -398,6 +474,13 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
   const changes: DiffChange[] = [];
   let unchangedCount = unchangedPairs.count;
   let colorIndex = 0;
+  const usedBeforeRelocated = new Set<number>(unchangedPairs.matchedBefore);
+  const usedAfterRelocated = new Set<number>(unchangedPairs.matchedAfter);
+  const noteBias = noteSuggestsRepositioning(notes?.afterNote ?? notes?.beforeNote);
+
+  function countMicroMoveUnchanged(strokes: Stroke[]): number {
+    return strokes.filter((s) => s.tool !== 'eraser').length;
+  }
 
   function pushChange(partial: Omit<DiffChange, 'color' | 'colorFill' | 'componentLabel'>) {
     const { stroke: color, fill: colorFill } = changeColorAt(colorIndex++);
@@ -418,7 +501,7 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
     const region = regionLabel(ac.bounds);
     const n = afterMemberStrokes.length;
 
-    if (!kind) {
+    if (!kind || move.displacement < MICRO_MOVE_THRESHOLD) {
       unchangedCount++;
       continue;
     }
@@ -434,6 +517,8 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
         bc.bounds,
         ac.bounds,
         move,
+        after,
+        notes?.afterNote,
       ),
       bounds: ac.bounds,
       beforeBounds: bc.bounds,
@@ -461,7 +546,11 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
       matchedAfter.add(relaxed.ai);
       const afterMemberStrokes = ac.strokeIndices.map((i) => after[i]);
       const detected = detectChangeKind(beforeMemberStrokes, afterMemberStrokes, bc, ac);
-      const kind = detected.kind ?? 'mov';
+      if (!detected.kind || detected.move.displacement < MICRO_MOVE_THRESHOLD) {
+        unchangedCount++;
+        continue;
+      }
+      const kind = detected.kind;
       const region = regionLabel(ac.bounds);
       pushChange({
         id: `comp-${kind}-${bi}-${relaxed.ai}`,
@@ -474,6 +563,8 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
           bc.bounds,
           ac.bounds,
           detected.move,
+          after,
+          notes?.afterNote,
         ),
         bounds: ac.bounds,
         beforeBounds: bc.bounds,
@@ -487,6 +578,52 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
 
     if (clusterPersistsInAfter(bc, beforeMemberStrokes, after)) {
       unchangedCount++;
+      continue;
+    }
+
+    const relocatedToAfter = clusterStrokesRelocatedToAfter(
+      beforeMemberStrokes,
+      after,
+      usedAfterRelocated,
+    );
+    if (relocatedToAfter) {
+      if (relocatedToAfter.displacement < MICRO_MOVE_THRESHOLD) {
+        unchangedCount += countMicroMoveUnchanged(beforeMemberStrokes);
+        continue;
+      }
+      const afterStrokesMoved =
+        relocatedToAfter.afterMemberStrokes ?? beforeMemberStrokes;
+      let afterBounds = strokeBounds(afterStrokesMoved[0]);
+      for (let k = 1; k < afterStrokesMoved.length; k++) {
+        afterBounds = mergeBounds(afterBounds, strokeBounds(afterStrokesMoved[k]));
+      }
+      const region = regionLabel(afterBounds);
+      pushChange({
+        id: `comp-mov-rem-${bi}`,
+        kind: 'mov',
+        summary: buildComponentSummary('mov', region, afterStrokesMoved.length),
+        detail: buildComponentDetail(
+          'mov',
+          afterStrokesMoved,
+          beforeMemberStrokes,
+          bc.bounds,
+          afterBounds,
+          relocatedToAfter,
+          after,
+          notes?.afterNote,
+        ),
+        bounds: afterBounds,
+        beforeBounds: bc.bounds,
+        strokeCount: afterStrokesMoved.length,
+        beforeStrokeCount: beforeMemberStrokes.length,
+        memberStrokes: afterStrokesMoved,
+        beforeMemberStrokes,
+      });
+      for (let ai = 0; ai < afterClusters.length; ai++) {
+        if (afterClusters[ai].strokeIndices.some((idx) => usedAfterRelocated.has(idx))) {
+          matchedAfter.add(ai);
+        }
+      }
       continue;
     }
 
@@ -514,6 +651,46 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
       continue;
     }
 
+    const relocated = clusterWasRelocated(strokes, before, usedBeforeRelocated);
+    if (relocated) {
+      if (relocated.displacement < MICRO_MOVE_THRESHOLD) {
+        unchangedCount += countMicroMoveUnchanged(strokes);
+        continue;
+      }
+    }
+    if (relocated && (relocated.isMove || noteBias)) {
+      let beforeBounds = strokeBounds(relocated.beforeMemberStrokes[0]);
+      for (let k = 1; k < relocated.beforeMemberStrokes.length; k++) {
+        beforeBounds = mergeBounds(
+          beforeBounds,
+          strokeBounds(relocated.beforeMemberStrokes[k]),
+        );
+      }
+      const region = regionLabel(ac.bounds);
+      pushChange({
+        id: `comp-mov-reloc-${ai}`,
+        kind: 'mov',
+        summary: buildComponentSummary('mov', region, strokes.length),
+        detail: buildComponentDetail(
+          'mov',
+          strokes,
+          relocated.beforeMemberStrokes,
+          beforeBounds,
+          ac.bounds,
+          relocated,
+          after,
+          notes?.afterNote,
+        ),
+        bounds: ac.bounds,
+        beforeBounds,
+        strokeCount: strokes.length,
+        beforeStrokeCount: relocated.beforeMemberStrokes.length,
+        memberStrokes: strokes,
+        beforeMemberStrokes: relocated.beforeMemberStrokes,
+      });
+      continue;
+    }
+
     const region = regionLabel(ac.bounds);
     pushChange({
       id: `comp-add-${ai}`,
@@ -529,20 +706,36 @@ export function diffComponents(before: Stroke[], after: Stroke[]): DiffResult {
   const order: ChangeKind[] = ['add', 'rem', 'mov'];
   changes.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
 
-  return { changes, unchangedCount, beforeStrokes: before, afterStrokes: after };
+  let result = { changes, unchangedCount, beforeStrokes: before, afterStrokes: after };
+  result = reconcileOpposingAddRem(result, notes);
+  return result;
 }
 
-export function diffSvgComponents(beforeSvg: string, afterSvg: string): DiffResult {
+export function diffSvgComponents(
+  beforeSvg: string,
+  afterSvg: string,
+  path?: DiffPathContext,
+): DiffResult {
   const beforeStrokes = parseStrokesFromSvg(beforeSvg) ?? [];
   const afterStrokes = parseStrokesFromSvg(afterSvg) ?? [];
-  return diffComponents(beforeStrokes, afterStrokes);
+  const notes: ReconcileNotes | undefined = path
+    ? { beforeNote: path.beforeNote, afterNote: path.afterNote }
+    : undefined;
+  let result = diffComponents(beforeStrokes, afterStrokes, notes);
+  if (path && path.toIdx - path.fromIdx > 1) {
+    result = reconcileDiffWithPath(result, path);
+  }
+  return result;
 }
+
+export type { DiffPathContext } from './diffPathReconcile';
 
 export async function diffSvgComponentsAsync(
   beforeSvg: string,
   afterSvg: string,
+  path?: DiffPathContext,
 ): Promise<DiffResult> {
-  const base = diffSvgComponents(beforeSvg, afterSvg);
+  const base = diffSvgComponents(beforeSvg, afterSvg, path);
   const { diffSvgWithPixelVision } = await import('./refinePixelDiff');
   return diffSvgWithPixelVision(beforeSvg, afterSvg, base);
 }
